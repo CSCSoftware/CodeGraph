@@ -5,7 +5,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, type QueryMode } from '../commands/index.js';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, type QueryMode } from '../commands/index.js';
 import { openDatabase } from '../db/index.js';
 
 /**
@@ -284,6 +284,24 @@ export function registerTools(): Tool[] {
                 required: ['path'],
             },
         },
+        {
+            name: 'codegraph_scan',
+            description: 'Scan a directory tree to find all projects with CodeGraph indexes (.codegraph directories). Useful for discovering indexed projects.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Root path to scan for .codegraph directories',
+                    },
+                    max_depth: {
+                        type: 'number',
+                        description: 'Maximum directory depth to scan (default: 10)',
+                    },
+                },
+                required: ['path'],
+            },
+        },
     ];
 }
 
@@ -334,6 +352,9 @@ export async function handleToolCall(
 
             case 'codegraph_links':
                 return handleLinks(args);
+
+            case 'codegraph_scan':
+                return handleScan(args);
 
             default:
                 return {
@@ -968,6 +989,51 @@ function handleLinks(args: Record<string, unknown>): { content: Array<{ type: st
         if (!dep.available) {
             message += `  ⚠️ Not available (index missing)\n`;
         }
+        message += '\n';
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle codegraph_scan
+ */
+function handleScan(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = scan({
+        path,
+        maxDepth: args.max_depth as number | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.projects.length === 0) {
+        return {
+            content: [{ type: 'text', text: `No CodeGraph indexes found in ${result.searchPath}\n(scanned ${result.scannedDirs} directories)` }],
+        };
+    }
+
+    let message = `# CodeGraph Indexes Found (${result.projects.length})\n\n`;
+    message += `Scanned: ${result.searchPath} (${result.scannedDirs} directories)\n\n`;
+
+    for (const proj of result.projects) {
+        message += `## ${proj.name}\n`;
+        message += `- **Path:** ${proj.path}\n`;
+        message += `- **Files:** ${proj.files} | **Items:** ${proj.items} | **Methods:** ${proj.methods} | **Types:** ${proj.types}\n`;
+        message += `- **Last indexed:** ${proj.lastIndexed}\n`;
         message += '\n';
     }
 
