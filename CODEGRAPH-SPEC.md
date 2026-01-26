@@ -659,16 +659,21 @@ Tree-sitter is an incremental parser that:
 - Reliably distinguishes between Identifier, Keyword, Comment, String
 - Supports incremental parsing (only changed parts)
 
-#### Supported Languages (Initial)
+#### Supported Languages
 
-| Language | Tree-sitter Package | Keywords Filter |
-|----------|---------------------|-----------------|
-| C# | tree-sitter-c-sharp | csharp.ts |
-| TypeScript | tree-sitter-typescript | typescript.ts |
-| JavaScript | tree-sitter-javascript | javascript.ts |
-| Python | tree-sitter-python | python.ts |
-| Go | tree-sitter-go | go.ts |
-| Rust | tree-sitter-rust | rust.ts |
+| Language | Tree-sitter Package | Keywords Filter | Extensions |
+|----------|---------------------|-----------------|------------|
+| C# | tree-sitter-c-sharp | csharp.ts | `.cs` |
+| TypeScript | tree-sitter-typescript | typescript.ts | `.ts`, `.tsx` |
+| JavaScript | tree-sitter-typescript | typescript.ts | `.js`, `.jsx`, `.mjs`, `.cjs` |
+| Python | tree-sitter-python | python.ts | `.py`, `.pyw` |
+| Rust | tree-sitter-rust | rust.ts | `.rs` |
+| C | tree-sitter-c | c.ts | `.c`, `.h` |
+| C++ | tree-sitter-cpp | cpp.ts | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hxx` |
+| Java | tree-sitter-java | java.ts | `.java` |
+| Go | tree-sitter-go | go.ts | `.go` |
+| PHP | tree-sitter-php | php.ts | `.php` |
+| Ruby | tree-sitter-ruby | ruby.ts | `.rb`, `.rake` |
 
 ### 6.2 Extraction Pipeline
 
@@ -934,7 +939,10 @@ Executed in a single transaction for consistency and performance.
 | `codegraph_describe` | Extend project summary |
 | `codegraph_tree` | Get file tree |
 | `codegraph_link` | Link dependency |
+| `codegraph_unlink` | Remove linked dependency |
+| `codegraph_links` | List linked dependencies |
 | `codegraph_status` | Get status/statistics |
+| `codegraph_scan` | Find all indexed projects in a directory tree |
 
 ### 8.2 Tool Definitions
 

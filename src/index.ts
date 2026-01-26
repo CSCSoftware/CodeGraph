@@ -6,10 +6,11 @@
  * Usage:
  *   node build/index.js              - Start MCP server (default)
  *   node build/index.js scan <path>  - Scan for .codegraph directories
+ *   node build/index.js init <path>  - Index a project
  */
 
 import { createServer } from './server/mcp-server.js';
-import { scan } from './commands/index.js';
+import { scan, init } from './commands/index.js';
 
 async function main() {
     const args = process.argv.slice(2);
@@ -43,6 +44,32 @@ async function main() {
                 console.log();
             }
         }
+
+        return;
+    }
+
+    // CLI mode: init
+    if (args[0] === 'init') {
+        const projectPath = args[1];
+        if (!projectPath) {
+            console.error('Usage: codegraph init <path>');
+            process.exit(1);
+        }
+
+        console.log(`Indexing: ${projectPath}`);
+        const result = await init({ path: projectPath });
+
+        if (!result.success) {
+            console.error(`Error: ${result.errors.join(', ')}`);
+            process.exit(1);
+        }
+
+        console.log(`Done!`);
+        console.log(`  Files: ${result.filesIndexed}`);
+        console.log(`  Items: ${result.itemsFound}`);
+        console.log(`  Methods: ${result.methodsFound}`);
+        console.log(`  Types: ${result.typesFound}`);
+        console.log(`  Time: ${result.durationMs}ms`);
 
         return;
     }
