@@ -1,201 +1,201 @@
-# CodeGraph Spezifikation
+# CodeGraph Specification
 
 > **Version:** 1.0 (Draft)
-> **Erstellt:** 25. Januar 2026
-> **Autoren:** Uwe Chalas, Claude (Rudi)
+> **Created:** January 25, 2026
+> **Authors:** Uwe Chalas, Claude (Rudi)
 
 ---
 
-## Inhaltsverzeichnis
+## Table of Contents
 
-1. [Übersicht & Motivation](#1-übersicht--motivation)
-2. [Kernkonzepte](#2-kernkonzepte)
-3. [Architektur](#3-architektur)
-4. [Datenmodell](#4-datenmodell)
+1. [Overview & Motivation](#1-overview--motivation)
+2. [Core Concepts](#2-core-concepts)
+3. [Architecture](#3-architecture)
+4. [Data Model](#4-data-model)
 5. [SQLite Schema](#5-sqlite-schema)
-6. [Parser-System](#6-parser-system)
-7. [Update-Mechanismus](#7-update-mechanismus)
+6. [Parser System](#6-parser-system)
+7. [Update Mechanism](#7-update-mechanism)
 8. [MCP Server Interface](#8-mcp-server-interface)
-9. [Workflow-Beispiele](#9-workflow-beispiele)
-10. [Projektstruktur](#10-projektstruktur)
-11. [Zukünftige Erweiterungen](#11-zukünftige-erweiterungen)
+9. [Workflow Examples](#9-workflow-examples)
+10. [Project Structure](#10-project-structure)
+11. [Future Extensions](#11-future-extensions)
 
 ---
 
-## 1. Übersicht & Motivation
+## 1. Overview & Motivation
 
-### 1.1 Das Problem
+### 1.1 The Problem
 
-Wenn Claude Code mit einem Projekt arbeitet, muss er bei jeder Suche:
+When Claude Code works with a project, it must perform on every search:
 
-1. **Grep** durch tausende Dateien ausführen
-2. **Read** von hunderten Zeilen um Kontext zu verstehen
-3. Den **Kontext vollmüllen** mit Suchläufen
-4. Bei neuer Session **alles vergessen** und von vorn beginnen
+1. **Grep** through thousands of files
+2. **Read** hundreds of lines to understand context
+3. **Clutter the context** with search runs
+4. **Forget everything** on new sessions and start from scratch
 
-Bei einem unbekannten Projekt muss Claude:
+When working with an unfamiliar project, Claude must:
 
-1. Die komplette Dateistruktur erkunden
-2. Einstiegspunkte suchen (main, Program, App...)
-3. Massenhaft Dateien lesen um Zusammenhänge zu verstehen
-4. All das frisst Kontext und Zeit
+1. Explore the complete file structure
+2. Search for entry points (main, Program, App...)
+3. Read massive amounts of files to understand relationships
+4. All of this consumes context and time
 
-### 1.2 Die Lösung: CodeGraph
+### 1.2 The Solution: CodeGraph
 
-CodeGraph ist ein **lokales, persistentes Index-System** pro Projekt, das:
+CodeGraph is a **local, persistent index system** per project that:
 
-- Alle **bedeutungstragenden Terme** (Identifier, nicht Keywords) indiziert
-- **Datei-Signaturen** speichert (Prototypen, Header-Kommentare)
-- **Projekt-Summaries** verwaltet
-- **Abhängigkeiten** zwischen Projekten verknüpft
-- Über ein **MCP-Interface** direkt in Claude Code nutzbar ist
+- Indexes all **meaningful terms** (identifiers, not keywords)
+- Stores **file signatures** (prototypes, header comments)
+- Manages **project summaries**
+- Links **dependencies** between projects
+- Is directly usable in Claude Code via an **MCP interface**
 
-### 1.3 Der Nutzen
+### 1.3 The Benefits
 
-**Vorher:**
+**Before:**
 ```
-Grep "PlayerHealth" → 200 Treffer in 40 Dateien → Read → Read → Read...
+Grep "PlayerHealth" → 200 hits in 40 files → Read → Read → Read...
 ```
 
-**Nachher:**
+**After:**
 ```
 codegraph_query "PlayerHealth"
 → Engine.cs:45 (code)
 → Engine.cs:892 (comment)
 → Player.cs:23 (code)
-→ Fertig. Drei gezielte Stellen.
+→ Done. Three targeted locations.
 ```
 
-**Vorher (unbekanntes Projekt):**
+**Before (unfamiliar project):**
 ```
 ls → tree → grep "main" → read Program.cs → read Engine.cs → read...
-(5+ Minuten, viel Kontext verbraucht)
+(5+ minutes, lots of context consumed)
 ```
 
-**Nachher:**
+**After:**
 ```
 codegraph_summary → codegraph_signatures "src/Core/"
-→ Sofortiger Überblick über Zweck und Struktur
-(10 Sekunden, minimaler Kontext)
+→ Instant overview of purpose and structure
+(10 seconds, minimal context)
 ```
 
 ---
 
-## 2. Kernkonzepte
+## 2. Core Concepts
 
 ### 2.1 ProjectBase
 
-Jedes Projekt hat seine eigene **ProjectBase** - eine Datenbasis im Projektverzeichnis:
+Each project has its own **ProjectBase** - a data store in the project directory:
 
 ```
-MeinProjekt/
+MyProject/
 ├── src/
 │   └── ...
-└── .codegraph/              ← Die ProjectBase
-    ├── index.db             ← SQLite Datenbank
-    └── summary.md           ← Projekt-Beschreibung
+└── .codegraph/              ← The ProjectBase
+    ├── index.db             ← SQLite database
+    └── summary.md           ← Project description
 ```
 
-### 2.2 Der Dateibaum (Files)
+### 2.2 The File Tree (Files)
 
-Ein indizierter Baum aller Quelltextdateien:
+An indexed tree of all source files:
 
-| ID | Pfad | Hash |
+| ID | Path | Hash |
 |----|------|------|
 | 1 | /src/Core/Engine.cs | a3f8c2... |
 | 2 | /src/Core/Player.cs | b7d1e9... |
 | 3 | /src/Utils/MathHelper.cs | c2a4f1... |
 
-- **ID:** Eindeutige Integer-ID pro Datei
-- **Pfad:** Relativer Pfad vom Projektwurzel
-- **Hash:** Zur Erkennung von Änderungen
+- **ID:** Unique integer ID per file
+- **Path:** Relative path from project root
+- **Hash:** For detecting changes
 
-### 2.3 Zeilenobjekte (Lines)
+### 2.3 Line Objects (Lines)
 
-Jede relevante Zeile einer Datei wird erfasst:
+Each relevant line of a file is captured:
 
-| ID | DateiID | Nummer | Typ |
-|----|---------|--------|-----|
+| ID | FileID | Number | Type |
+|----|--------|--------|------|
 | 1 | 1 | 1 | comment |
 | 2 | 1 | 5 | code |
 | 3 | 1 | 12 | struct |
 
-- **ID:** Eindeutig **pro Datei** (nicht global!)
-- **DateiID:** Referenz auf die Datei im Baum
-- **Nummer:** Aktuelle Zeilennummer (kann sich ändern)
-- **Typ:** Klassifikation der Zeile
+- **ID:** Unique **per file** (not global!)
+- **FileID:** Reference to the file in the tree
+- **Number:** Current line number (can change)
+- **Type:** Classification of the line
 
 #### Composite Key
 
-Die echte Identität einer Zeile ist: **(DateiID + ZeilenID)**
+The true identity of a line is: **(FileID + LineID)**
 
-Dies ermöglicht:
-- Pro Datei reicht ein 16-bit Integer (65.535 Zeilen pro Datei)
-- IDs fangen pro Datei bei 1 an
-- Kein globaler Counter nötig
-- Kompakte Speicherung möglich: High 16 bit = DateiID, Low 16 bit = ZeilenID
+This enables:
+- A 16-bit integer is sufficient per file (65,535 lines per file)
+- IDs start at 1 per file
+- No global counter needed
+- Compact storage possible: High 16 bits = FileID, Low 16 bits = LineID
 
-#### Zeilentypen
+#### Line Types
 
-| Typ | Beschreibung |
-|-----|--------------|
-| `code` | Regulärer Code |
-| `comment` | Kommentarzeile |
-| `struct` | Struct/Class/Interface Definition |
-| `method` | Methodensignatur |
-| `property` | Property Definition |
-| `string` | String-Literal (ggf. für spätere Suche) |
+| Type | Description |
+|------|-------------|
+| `code` | Regular code |
+| `comment` | Comment line |
+| `struct` | Struct/Class/Interface definition |
+| `method` | Method signature |
+| `property` | Property definition |
+| `string` | String literal (possibly for later search) |
 
-### 2.4 Items (Terme)
+### 2.4 Items (Terms)
 
-Der Vektorraum aller **bedeutungstragenden Begriffe**:
+The vector space of all **meaningful terms**:
 
-| Item | Vorkommen (DateiID:ZeilenID) |
+| Item | Occurrences (FileID:LineID) |
 |------|------------------------------|
 | "PlayerHealth" | [(1:45), (1:892), (2:23)] |
 | "CalculateDamage" | [(1:156), (1:890)] |
 | "velocity" | [(2:23), (2:24), (2:89)] |
 
-#### Was NICHT indiziert wird
+#### What is NOT Indexed
 
-Sprachspezifische Keywords werden **ausgefiltert**:
+Language-specific keywords are **filtered out**:
 
 **C#:** `public`, `private`, `class`, `struct`, `interface`, `void`, `int`, `string`, `if`, `else`, `for`, `while`, `return`, `using`, `namespace`, `static`, `readonly`, `async`, `await`, `var`, `new`, `null`, `true`, `false`, ...
 
 **TypeScript:** `function`, `const`, `let`, `var`, `interface`, `type`, `class`, `export`, `import`, `if`, `else`, `for`, `while`, `return`, `async`, `await`, `null`, `undefined`, `true`, `false`, ...
 
-#### Was indiziert wird
+#### What IS Indexed
 
-- Variablennamen: `playerHealth`, `currentVelocity`
-- Funktionsnamen: `CalculateDamage`, `Initialize`
-- Klassennamen: `TornadoEngine`, `VortexField`
-- Kommentar-Inhalte: Nur die Wörter, nicht `//` oder `/* */`
+- Variable names: `playerHealth`, `currentVelocity`
+- Function names: `CalculateDamage`, `Initialize`
+- Class names: `TornadoEngine`, `VortexField`
+- Comment content: Only the words, not `//` or `/* */`
 
-#### Suchoptionen
+#### Search Options
 
-Items können gesucht werden mit:
-- **exact:** Exakte Übereinstimmung (`PlayerHealth`)
-- **contains:** Enthält den Term (`Player` findet `PlayerHealth`)
-- **starts_with:** Beginnt mit (`Calc` findet `CalculateDamage`)
+Items can be searched with:
+- **exact:** Exact match (`PlayerHealth`)
+- **contains:** Contains the term (`Player` finds `PlayerHealth`)
+- **starts_with:** Starts with (`Calc` finds `CalculateDamage`)
 
-### 2.5 Datei-Signaturen (Signatures)
+### 2.5 File Signatures (Signatures)
 
-Ein **Schnell-Profil** pro Quelltextdatei für sofortiges Verständnis:
+A **quick profile** per source file for instant understanding:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ SIGNATUR: TornadoEngine.cs                              │
+│ SIGNATURE: TornadoEngine.cs                             │
 ├─────────────────────────────────────────────────────────┤
-│ HEADER-KOMMENTARE:                                      │
-│   "Hauptklasse für die Tornado-Simulation.              │
-│    Steuert den Lebenszyklus und die Berechnung          │
-│    der Vortex-Felder."                                  │
+│ HEADER COMMENTS:                                        │
+│   "Main class for the tornado simulation.               │
+│    Controls the lifecycle and calculation               │
+│    of vortex fields."                                   │
 ├─────────────────────────────────────────────────────────┤
-│ KLASSEN/STRUCTS:                                        │
+│ CLASSES/STRUCTS:                                        │
 │   class TornadoEngine                                   │
 │   struct VortexConfig                                   │
 ├─────────────────────────────────────────────────────────┤
-│ METHODEN:                                               │
+│ METHODS:                                                │
 │   void Initialize(VortexConfig config)                  │
 │   void Update(float deltaTime)                          │
 │   void Shutdown()                                       │
@@ -205,147 +205,147 @@ Ein **Schnell-Profil** pro Quelltextdatei für sofortiges Verständnis:
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### Was eine Signatur enthält
+#### What a Signature Contains
 
-1. **Header-Kommentare:** Alle Kommentare am Anfang der Datei (vor dem ersten Code) und Klassen-/Namespace-Ebene Kommentare
-2. **Klassen/Structs:** Alle Typ-Definitionen
-3. **Methoden-Prototypen:** Nur die Signaturen, keine Implementierung
+1. **Header comments:** All comments at the beginning of the file (before the first code) and class/namespace level comments
+2. **Classes/Structs:** All type definitions
+3. **Method prototypes:** Only the signatures, no implementation
 
-#### Was eine Signatur NICHT enthält
+#### What a Signature Does NOT Contain
 
-- Implementierungen (Methodenbodies)
-- Kommentare innerhalb von Methoden
-- Private Felder
-- Lokale Variablen
+- Implementations (method bodies)
+- Comments inside methods
+- Private fields
+- Local variables
 
-### 2.6 Projekt-Summary
+### 2.6 Project Summary
 
-Eine übergeordnete Beschreibung des gesamten Projekts:
+A high-level description of the entire project:
 
 ```markdown
 # UCTornado
 
-## Zweck
-3D-Tornado-Simulation für Wetterdaten-Visualisierung
+## Purpose
+3D tornado simulation for weather data visualization
 
-## Architektur
+## Architecture
 - Entry Point: src/Program.cs
-- Hauptklasse: src/Core/TornadoEngine.cs
+- Main class: src/Core/TornadoEngine.cs
 - Rendering: src/Rendering/VortexRenderer.cs
 
-## Wichtige Konzepte
-- VortexField: Das Vektorfeld der Windströmung
-- ParticleSystem: Visualisiert Debris im Tornado
-- DataSource: Interface für Wetterdaten-Input
+## Key Concepts
+- VortexField: The vector field of wind flow
+- ParticleSystem: Visualizes debris in the tornado
+- DataSource: Interface for weather data input
 
 ## Dependencies
-- LibPyramid3D (3D-Rendering)
-- LibWeatherData (Datenformate)
+- LibPyramid3D (3D rendering)
+- LibWeatherData (data formats)
 
 ## Patterns
-- MVVM für UI
-- ECS für Partikel-Simulation
+- MVVM for UI
+- ECS for particle simulation
 ```
 
-#### Automatisch generierte Teile
+#### Automatically Generated Parts
 
-Beim `init` werden automatisch erkannt:
-- Entry Points (Program.cs, main.ts, index.js...)
-- Hauptklassen (meistgenutzte/referenzierte Terme)
-- Dependencies aus csproj/package.json
-- Verzeichnisstruktur
+During `init`, the following are automatically detected:
+- Entry points (Program.cs, main.ts, index.js...)
+- Main classes (most used/referenced terms)
+- Dependencies from csproj/package.json
+- Directory structure
 
-#### Manuell ergänzbare Teile
+#### Manually Extendable Parts
 
-- Zweck/Purpose
-- Wichtige Konzepte
-- Architektur-Entscheidungen
+- Purpose
+- Key concepts
+- Architecture decisions
 - Patterns
 
-Diese werden **nie überschrieben**, nur ergänzt.
+These are **never overwritten**, only extended.
 
-### 2.7 Projektdokumentation (Claude.md Integration)
+### 2.7 Project Documentation (Claude.md Integration)
 
-Die Inhalte der CLAUDE.md-Dateien werden direkt in CodeGraph integriert:
+The contents of CLAUDE.md files are integrated directly into CodeGraph:
 
 ```
 .codegraph/
 ├── index.db
-├── summary.md           ← Projekt-Summary (auto + manuell)
-└── docs.md              ← CLAUDE.md Inhalte (importiert)
+├── summary.md           ← Project summary (auto + manual)
+└── docs.md              ← CLAUDE.md contents (imported)
 ```
 
-#### Was importiert wird
+#### What is Imported
 
-- **Projekt-CLAUDE.md:** `.claude/CLAUDE.md` oder `CLAUDE.md` im Root
-- **Library-CLAUDE.md:** Alle `CLAUDE.md` in Unterverzeichnissen
-- **Struktur bleibt erhalten:** Überschriften werden zu Abschnitten
+- **Project CLAUDE.md:** `.claude/CLAUDE.md` or `CLAUDE.md` in root
+- **Library CLAUDE.md:** All `CLAUDE.md` in subdirectories
+- **Structure is preserved:** Headings become sections
 
-#### Beispiel
+#### Example
 
 ```markdown
-# docs.md (generiert aus CLAUDE.md-Dateien)
+# docs.md (generated from CLAUDE.md files)
 
-## Projekt: UCTornado
-> Quelle: .claude/CLAUDE.md
+## Project: UCTornado
+> Source: .claude/CLAUDE.md
 
-[Inhalt der Haupt-CLAUDE.md]
+[Content of main CLAUDE.md]
 
 ---
 
 ## Library: src/Physics
-> Quelle: src/Physics/CLAUDE.md
+> Source: src/Physics/CLAUDE.md
 
-[Inhalt der Physics-CLAUDE.md]
+[Content of Physics CLAUDE.md]
 
 ---
 
 ## Library: src/Rendering
-> Quelle: src/Rendering/CLAUDE.md
+> Source: src/Rendering/CLAUDE.md
 
-[Inhalt der Rendering-CLAUDE.md]
+[Content of Rendering CLAUDE.md]
 ```
 
-#### Synchronisation
+#### Synchronization
 
-- Bei `codegraph_init`: Alle CLAUDE.md-Dateien werden importiert
-- Bei `codegraph_update_docs`: Manueller Re-Import
-- Die Original-CLAUDE.md-Dateien bleiben unverändert (read-only Import)
+- On `codegraph_init`: All CLAUDE.md files are imported
+- On `codegraph_update_docs`: Manual re-import
+- The original CLAUDE.md files remain unchanged (read-only import)
 
-#### Neues Tool
+#### New Tool
 
 ```typescript
 codegraph_docs({
-    section?: string;  // Optional: Nur bestimmten Abschnitt
+    section?: string;  // Optional: Only specific section
 })
-// → Gibt die komplette docs.md zurück
+// → Returns the complete docs.md
 
 codegraph_update_docs()
-// → Re-importiert alle CLAUDE.md-Dateien
+// → Re-imports all CLAUDE.md files
 ```
 
-### 2.8 Dependencies (Verknüpfungen)
+### 2.8 Dependencies (Links)
 
-Wenn Projekt A eine Library B nutzt, wird deren CodeGraph verknüpft:
+When Project A uses Library B, its CodeGraph is linked:
 
 ```
 UCTornado/.codegraph/
-    → verlinkt auf → LibPyramid3D/.codegraph/
-    → verlinkt auf → LibWeatherData/.codegraph/
+    → linked to → LibPyramid3D/.codegraph/
+    → linked to → LibWeatherData/.codegraph/
 ```
 
-Eine Suche kann dann **über alle verknüpften Projekte** gehen:
+A search can then span **all linked projects**:
 
 ```
 codegraph_query "PyramidMesh" --include-dependencies
-→ Findet Treffer in UCTornado UND LibPyramid3D
+→ Finds matches in UCTornado AND LibPyramid3D
 ```
 
 ---
 
-## 3. Architektur
+## 3. Architecture
 
-### 3.1 Komponenten-Übersicht
+### 3.1 Component Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -369,12 +369,12 @@ codegraph_query "PyramidMesh" --include-dependencies
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    .codegraph/ Verzeichnis                   │
+│                    .codegraph/ Directory                     │
 │  ┌─────────────────────────┐  ┌───────────────────────────┐ │
 │  │      index.db           │  │      summary.md           │ │
 │  │  ───────────────────    │  │  ─────────────────────    │ │
-│  │  files                  │  │  Projekt-Beschreibung     │ │
-│  │  lines                  │  │  (auto + manuell)         │ │
+│  │  files                  │  │  Project description      │ │
+│  │  lines                  │  │  (auto + manual)          │ │
 │  │  items                  │  │                           │ │
 │  │  occurrences            │  │                           │ │
 │  │  signatures             │  │                           │ │
@@ -384,20 +384,20 @@ codegraph_query "PyramidMesh" --include-dependencies
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Technologie-Stack
+### 3.2 Technology Stack
 
-| Komponente | Technologie | Begründung |
-|------------|-------------|------------|
-| Runtime | Node.js / TypeScript | Native MCP-Unterstützung, plattformunabhängig |
-| Datenbank | SQLite | Eingebettet, schnell, eine Datei, bewährt |
-| Parser | Tree-sitter | Kennt 100+ Sprachen, unterscheidet Identifier/Keyword/Comment |
-| Protocol | MCP (Model Context Protocol) | Standard für Claude Code Tools |
+| Component | Technology | Rationale |
+|-----------|------------|-----------|
+| Runtime | Node.js / TypeScript | Native MCP support, cross-platform |
+| Database | SQLite | Embedded, fast, single file, proven |
+| Parser | Tree-sitter | Knows 100+ languages, distinguishes Identifier/Keyword/Comment |
+| Protocol | MCP (Model Context Protocol) | Standard for Claude Code Tools |
 
 ---
 
-## 4. Datenmodell
+## 4. Data Model
 
-### 4.1 Entity Relationship Diagramm
+### 4.1 Entity Relationship Diagram
 
 ```
 ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
@@ -433,19 +433,19 @@ codegraph_query "PyramidMesh" --include-dependencies
                  ├─────────────┤                         │
                  │ id (PK)     │                         │
                  │ path        │─────────────────────────┘
-                 └─────────────┘   (zeigt auf andere .codegraph)
+                 └─────────────┘   (points to other .codegraph)
 ```
 
-### 4.2 Datentypen
+### 4.2 Data Types
 
 #### File
 
 ```typescript
 interface File {
     id: number;              // Auto-increment
-    path: string;            // Relativer Pfad: "src/Core/Engine.cs"
-    hash: string;            // SHA-256 oder ähnlich
-    last_indexed: number;    // Unix Timestamp
+    path: string;            // Relative path: "src/Core/Engine.cs"
+    hash: string;            // SHA-256 or similar
+    last_indexed: number;    // Unix timestamp
 }
 ```
 
@@ -453,9 +453,9 @@ interface File {
 
 ```typescript
 interface Line {
-    id: number;              // Eindeutig pro Datei, startet bei 1
-    file_id: number;         // Referenz auf File
-    line_number: number;     // Aktuelle Zeilennummer (1-basiert)
+    id: number;              // Unique per file, starts at 1
+    file_id: number;         // Reference to File
+    line_number: number;     // Current line number (1-based)
     line_type: LineType;     // 'code' | 'comment' | 'struct' | 'method' | 'property' | 'string'
 }
 
@@ -467,7 +467,7 @@ interface Line {
 ```typescript
 interface Item {
     id: number;              // Auto-increment
-    term: string;            // Der indizierte Begriff: "PlayerHealth"
+    term: string;            // The indexed term: "PlayerHealth"
 }
 ```
 
@@ -475,9 +475,9 @@ interface Item {
 
 ```typescript
 interface Occurrence {
-    item_id: number;         // Referenz auf Item
-    file_id: number;         // Referenz auf File
-    line_id: number;         // Referenz auf Line (innerhalb der Datei)
+    item_id: number;         // Reference to Item
+    file_id: number;         // Reference to File
+    line_id: number;         // Reference to Line (within the file)
 }
 ```
 
@@ -485,8 +485,8 @@ interface Occurrence {
 
 ```typescript
 interface Signature {
-    file_id: number;         // Referenz auf File (1:1)
-    header_comments: string; // Alle Header-Kommentare, zusammengefasst
+    file_id: number;         // Reference to File (1:1)
+    header_comments: string; // All header comments, combined
 }
 ```
 
@@ -495,10 +495,10 @@ interface Signature {
 ```typescript
 interface Method {
     id: number;              // Auto-increment
-    file_id: number;         // Referenz auf File
+    file_id: number;         // Reference to File
     name: string;            // "CalculateField"
     prototype: string;       // "VortexField CalculateField(Vector3 center, float radius)"
-    line_number: number;     // Wo die Methode beginnt
+    line_number: number;     // Where the method begins
 }
 ```
 
@@ -507,7 +507,7 @@ interface Method {
 ```typescript
 interface Dependency {
     id: number;              // Auto-increment
-    path: string;            // Absoluter Pfad zur anderen .codegraph
+    path: string;            // Absolute path to the other .codegraph
 }
 ```
 
@@ -522,10 +522,10 @@ interface Dependency {
 -- ============================================================
 
 PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;  -- Write-Ahead Logging für Performance
+PRAGMA journal_mode = WAL;  -- Write-Ahead Logging for performance
 
 -- ------------------------------------------------------------
--- Dateibaum
+-- File Tree
 -- ------------------------------------------------------------
 CREATE TABLE files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -538,7 +538,7 @@ CREATE INDEX idx_files_path ON files(path);
 CREATE INDEX idx_files_hash ON files(hash);
 
 -- ------------------------------------------------------------
--- Zeilenobjekte
+-- Line Objects
 -- ------------------------------------------------------------
 CREATE TABLE lines (
     id INTEGER NOT NULL,
@@ -553,7 +553,7 @@ CREATE INDEX idx_lines_file ON lines(file_id);
 CREATE INDEX idx_lines_type ON lines(line_type);
 
 -- ------------------------------------------------------------
--- Items (Terme)
+-- Items (Terms)
 -- ------------------------------------------------------------
 CREATE TABLE items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -562,11 +562,11 @@ CREATE TABLE items (
 
 CREATE INDEX idx_items_term ON items(term);
 
--- Für contains/starts_with Suchen
+-- For contains/starts_with searches
 CREATE INDEX idx_items_term_pattern ON items(term COLLATE NOCASE);
 
 -- ------------------------------------------------------------
--- Item-Vorkommen
+-- Item Occurrences
 -- ------------------------------------------------------------
 CREATE TABLE occurrences (
     item_id INTEGER NOT NULL,
@@ -581,7 +581,7 @@ CREATE INDEX idx_occurrences_item ON occurrences(item_id);
 CREATE INDEX idx_occurrences_file ON occurrences(file_id);
 
 -- ------------------------------------------------------------
--- Datei-Signaturen
+-- File Signatures
 -- ------------------------------------------------------------
 CREATE TABLE signatures (
     file_id INTEGER PRIMARY KEY,
@@ -590,7 +590,7 @@ CREATE TABLE signatures (
 );
 
 -- ------------------------------------------------------------
--- Methoden/Funktionen
+-- Methods/Functions
 -- ------------------------------------------------------------
 CREATE TABLE methods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -608,7 +608,7 @@ CREATE INDEX idx_methods_file ON methods(file_id);
 CREATE INDEX idx_methods_name ON methods(name);
 
 -- ------------------------------------------------------------
--- Klassen/Structs/Interfaces
+-- Classes/Structs/Interfaces
 -- ------------------------------------------------------------
 CREATE TABLE types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -623,24 +623,24 @@ CREATE INDEX idx_types_file ON types(file_id);
 CREATE INDEX idx_types_name ON types(name);
 
 -- ------------------------------------------------------------
--- Abhängigkeiten zu anderen CodeGraph-Instanzen
+-- Dependencies to Other CodeGraph Instances
 -- ------------------------------------------------------------
 CREATE TABLE dependencies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
-    name TEXT,  -- Optionaler Anzeigename: "LibPyramid3D"
-    last_checked INTEGER  -- Wann zuletzt verfügbar
+    name TEXT,  -- Optional display name: "LibPyramid3D"
+    last_checked INTEGER  -- When last verified available
 );
 
 -- ------------------------------------------------------------
--- Metadaten
+-- Metadata
 -- ------------------------------------------------------------
 CREATE TABLE metadata (
     key TEXT PRIMARY KEY,
     value TEXT
 );
 
--- Initial-Metadaten
+-- Initial metadata
 INSERT INTO metadata (key, value) VALUES
     ('schema_version', '1.0'),
     ('created_at', strftime('%s', 'now')),
@@ -650,19 +650,19 @@ INSERT INTO metadata (key, value) VALUES
 
 ---
 
-## 6. Parser-System
+## 6. Parser System
 
 ### 6.1 Tree-sitter Integration
 
-Tree-sitter ist ein inkrementeller Parser, der:
-- Die Grammatik von 100+ Sprachen kennt
-- Zuverlässig zwischen Identifier, Keyword, Comment, String unterscheidet
-- Inkrementelles Parsing unterstützt (nur geänderte Teile)
+Tree-sitter is an incremental parser that:
+- Knows the grammar of 100+ languages
+- Reliably distinguishes between Identifier, Keyword, Comment, String
+- Supports incremental parsing (only changed parts)
 
-#### Unterstützte Sprachen (Initial)
+#### Supported Languages (Initial)
 
-| Sprache | Tree-sitter Package | Keywords-Filter |
-|---------|---------------------|-----------------|
+| Language | Tree-sitter Package | Keywords Filter |
+|----------|---------------------|-----------------|
 | C# | tree-sitter-c-sharp | csharp.ts |
 | TypeScript | tree-sitter-typescript | typescript.ts |
 | JavaScript | tree-sitter-javascript | javascript.ts |
@@ -670,74 +670,74 @@ Tree-sitter ist ein inkrementeller Parser, der:
 | Go | tree-sitter-go | go.ts |
 | Rust | tree-sitter-rust | rust.ts |
 
-### 6.2 Extraktion-Pipeline
+### 6.2 Extraction Pipeline
 
 ```
-Quelldatei
+Source File
     │
     ▼
 ┌─────────────────────────────────────────┐
 │           Tree-sitter Parser            │
 │  ─────────────────────────────────────  │
-│  Erzeugt Abstract Syntax Tree (AST)     │
+│  Generates Abstract Syntax Tree (AST)   │
 └─────────────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────────────┐
 │           Node Visitor                  │
 │  ─────────────────────────────────────  │
-│  Traversiert den AST                    │
-│  Klassifiziert jeden Node               │
+│  Traverses the AST                      │
+│  Classifies each node                   │
 └─────────────────────────────────────────┘
     │
-    ├──► Identifier → Keyword-Filter → Items
+    ├──► Identifier → Keyword Filter → Items
     │
-    ├──► Comment → Text extrahieren → Items + Zeile als 'comment'
+    ├──► Comment → Extract text → Items + Line as 'comment'
     │
-    ├──► Method/Function → Prototype → Methods-Tabelle
+    ├──► Method/Function → Prototype → Methods table
     │
-    ├──► Class/Struct/Interface → Types-Tabelle
+    ├──► Class/Struct/Interface → Types table
     │
-    └──► String Literal → Optional für spätere Suche
+    └──► String Literal → Optional for later search
 ```
 
-### 6.3 Keyword-Filter Beispiel (C#)
+### 6.3 Keyword Filter Example (C#)
 
 ```typescript
 // src/parser/languages/csharp.ts
 
 export const CSHARP_KEYWORDS = new Set([
-    // Zugriffsmodifikatoren
+    // Access modifiers
     'public', 'private', 'protected', 'internal',
 
-    // Typ-Keywords
+    // Type keywords
     'class', 'struct', 'interface', 'enum', 'record',
     'namespace', 'using',
 
-    // Modifikatoren
+    // Modifiers
     'static', 'readonly', 'const', 'volatile',
     'virtual', 'override', 'abstract', 'sealed',
     'async', 'await', 'partial',
 
-    // Primitive Typen
+    // Primitive types
     'void', 'int', 'uint', 'long', 'ulong', 'short', 'ushort',
     'byte', 'sbyte', 'float', 'double', 'decimal',
     'bool', 'char', 'string', 'object', 'dynamic', 'var',
 
-    // Kontrollfluss
+    // Control flow
     'if', 'else', 'switch', 'case', 'default',
     'for', 'foreach', 'while', 'do',
     'break', 'continue', 'return', 'yield',
     'try', 'catch', 'finally', 'throw',
     'goto',
 
-    // Operatoren/Literale
+    // Operators/Literals
     'new', 'typeof', 'sizeof', 'nameof',
     'is', 'as', 'in', 'out', 'ref',
     'true', 'false', 'null',
     'this', 'base',
 
-    // Andere
+    // Other
     'get', 'set', 'init', 'value',
     'where', 'select', 'from', 'orderby', 'groupby',  // LINQ
     'delegate', 'event', 'operator',
@@ -751,33 +751,33 @@ export function isKeyword(term: string): boolean {
 }
 ```
 
-### 6.4 Signatur-Extraktion
+### 6.4 Signature Extraction
 
 ```typescript
-// Pseudocode für Signatur-Extraktion
+// Pseudocode for signature extraction
 
 function extractSignature(ast: AST, filePath: string): Signature {
     const headerComments: string[] = [];
     const methods: Method[] = [];
     const types: Type[] = [];
 
-    // 1. Header-Kommentare sammeln (vor erstem Code)
+    // 1. Collect header comments (before first code)
     for (const node of ast.rootNode.children) {
         if (node.type === 'comment') {
             headerComments.push(extractCommentText(node));
         } else if (!isUsingOrNamespace(node)) {
-            break;  // Erster echter Code erreicht
+            break;  // First real code reached
         }
     }
 
-    // 2. Klassen-Level Kommentare sammeln
+    // 2. Collect class-level comments
     for (const classNode of findNodes(ast, 'class_declaration')) {
         const docComment = findPrecedingComment(classNode);
         if (docComment) {
             headerComments.push(extractCommentText(docComment));
         }
 
-        // Typ erfassen
+        // Capture type
         types.push({
             name: getClassName(classNode),
             kind: 'class',
@@ -785,11 +785,11 @@ function extractSignature(ast: AST, filePath: string): Signature {
         });
     }
 
-    // 3. Methoden-Prototypen sammeln (keine Bodies)
+    // 3. Collect method prototypes (no bodies)
     for (const methodNode of findNodes(ast, 'method_declaration')) {
         methods.push({
             name: getMethodName(methodNode),
-            prototype: getMethodPrototype(methodNode),  // Nur Signatur!
+            prototype: getMethodPrototype(methodNode),  // Signature only!
             line_number: methodNode.startPosition.row + 1,
             visibility: getVisibility(methodNode),
             is_static: isStatic(methodNode),
@@ -807,13 +807,13 @@ function extractSignature(ast: AST, filePath: string): Signature {
 
 ---
 
-## 7. Update-Mechanismus
+## 7. Update Mechanism
 
-### 7.1 Inkrementelles Update
+### 7.1 Incremental Update
 
-Das Kernprinzip: **Nur ändern, was sich geändert hat.**
+The core principle: **Only change what has changed.**
 
-#### Szenario: Zeilen 45-52 in Engine.cs geändert
+#### Scenario: Lines 45-52 in Engine.cs Changed
 
 ```typescript
 codegraph_update({
@@ -823,71 +823,71 @@ codegraph_update({
 });
 ```
 
-**Was passiert:**
+**What happens:**
 
-1. **Datei laden** und mit Tree-sitter parsen
-2. **Betroffene Zeilen identifizieren:**
-   - Alle Lines mit `line_number` zwischen 45 und 52
-3. **Alte Daten entfernen:**
-   - Occurrences die auf diese Lines zeigen
-   - Items die nur hier vorkamen (Referenzcount = 0)
-4. **Neue Daten extrahieren:**
-   - Zeilen 45-52 parsen
-   - Neue Items/Occurrences anlegen
-5. **Offset berechnen:**
-   - Alte Zeilenanzahl vs. neue Zeilenanzahl
-   - Alle Lines ab Zeile 53 um Offset verschieben
-6. **Hash aktualisieren**
+1. **Load file** and parse with Tree-sitter
+2. **Identify affected lines:**
+   - All Lines with `line_number` between 45 and 52
+3. **Remove old data:**
+   - Occurrences pointing to these Lines
+   - Items that only occurred here (reference count = 0)
+4. **Extract new data:**
+   - Parse lines 45-52
+   - Create new Items/Occurrences
+5. **Calculate offset:**
+   - Old line count vs. new line count
+   - Shift all Lines from line 53 onwards by offset
+6. **Update hash**
 
-#### Offset-Berechnung
+#### Offset Calculation
 
 ```typescript
-// Beispiel: 5 Zeilen wurden eingefügt bei Zeile 50
+// Example: 5 lines were inserted at line 50
 
 const oldLineCount = getLineCountFromDB(fileId);  // 100
 const newLineCount = countLinesInFile(filePath);  // 105
 const offset = newLineCount - oldLineCount;       // +5
 
-// Alle Zeilen ab der Änderung verschieben
+// Shift all lines from the change point
 UPDATE lines
 SET line_number = line_number + 5
 WHERE file_id = ? AND line_number >= 50;
 ```
 
-### 7.2 Vollständiges Update
+### 7.2 Full Update
 
-Wenn keine Zeilenangaben gemacht werden:
+When no line ranges are specified:
 
 ```typescript
 codegraph_update({
     file: "src/Core/Engine.cs"
-    // keine from_line/to_line
+    // no from_line/to_line
 });
 ```
 
-**Was passiert:**
+**What happens:**
 
-1. Alle Daten für diese Datei löschen (CASCADE)
-2. Datei komplett neu parsen
-3. Alle Daten neu anlegen
-4. Hash aktualisieren
+1. Delete all data for this file (CASCADE)
+2. Completely re-parse the file
+3. Create all data anew
+4. Update hash
 
-### 7.3 Datei hinzugefügt
+### 7.3 File Added
 
 ```typescript
-// Automatisch bei update, wenn Datei noch nicht existiert
+// Automatic on update if file doesn't exist yet
 codegraph_update({
     file: "src/NewFeature/NewClass.cs"
 });
 ```
 
-**Was passiert:**
+**What happens:**
 
-1. Neuer Eintrag in `files`
-2. Komplettes Parsing
-3. Alle Tabellen befüllen
+1. New entry in `files`
+2. Complete parsing
+3. Populate all tables
 
-### 7.4 Datei gelöscht
+### 7.4 File Deleted
 
 ```typescript
 codegraph_remove({
@@ -895,14 +895,14 @@ codegraph_remove({
 });
 ```
 
-**Was passiert:**
+**What happens:**
 
 1. `DELETE FROM files WHERE path = ?`
-2. Alle abhängigen Daten werden durch CASCADE gelöscht
+2. All dependent data is deleted through CASCADE
 
-### 7.5 Batch-Update
+### 7.5 Batch Update
 
-Für viele Dateien gleichzeitig:
+For many files at once:
 
 ```typescript
 codegraph_update_batch({
@@ -914,52 +914,52 @@ codegraph_update_batch({
 });
 ```
 
-Wird in einer Transaktion ausgeführt für Konsistenz und Performance.
+Executed in a single transaction for consistency and performance.
 
 ---
 
 ## 8. MCP Server Interface
 
-### 8.1 Tool-Übersicht
+### 8.1 Tool Overview
 
-| Tool | Beschreibung |
-|------|--------------|
-| `codegraph_init` | Neues Projekt initialisieren |
-| `codegraph_update` | Datei(bereich) neu indexieren |
-| `codegraph_remove` | Datei aus Index entfernen |
-| `codegraph_query` | Items/Terme suchen |
-| `codegraph_signature` | Datei-Signatur abrufen |
-| `codegraph_signatures` | Mehrere Signaturen abrufen |
-| `codegraph_summary` | Projekt-Summary abrufen |
-| `codegraph_describe` | Projekt-Summary ergänzen |
-| `codegraph_tree` | Dateibaum abrufen |
-| `codegraph_link` | Dependency verknüpfen |
-| `codegraph_status` | Status/Statistiken abrufen |
+| Tool | Description |
+|------|-------------|
+| `codegraph_init` | Initialize a new project |
+| `codegraph_update` | Re-index file (range) |
+| `codegraph_remove` | Remove file from index |
+| `codegraph_query` | Search items/terms |
+| `codegraph_signature` | Get file signature |
+| `codegraph_signatures` | Get multiple signatures |
+| `codegraph_summary` | Get project summary |
+| `codegraph_describe` | Extend project summary |
+| `codegraph_tree` | Get file tree |
+| `codegraph_link` | Link dependency |
+| `codegraph_status` | Get status/statistics |
 
-### 8.2 Tool-Definitionen
+### 8.2 Tool Definitions
 
 #### codegraph_init
 
-Initialisiert CodeGraph für ein Projekt.
+Initializes CodeGraph for a project.
 
 ```typescript
 interface InitParams {
-    path: string;           // Projektverzeichnis
-    name?: string;          // Optionaler Projektname
-    languages?: string[];   // Zu indizieren: ['csharp', 'typescript']
-    exclude?: string[];     // Auszuschließende Patterns: ['**/bin/**', '**/node_modules/**']
+    path: string;           // Project directory
+    name?: string;          // Optional project name
+    languages?: string[];   // To index: ['csharp', 'typescript']
+    exclude?: string[];     // Patterns to exclude: ['**/bin/**', '**/node_modules/**']
 }
 
 interface InitResult {
     success: boolean;
-    codegraph_path: string;  // Pfad zur .codegraph
+    codegraph_path: string;  // Path to .codegraph
     files_indexed: number;
     items_found: number;
     duration_ms: number;
 }
 ```
 
-**Beispiel:**
+**Example:**
 ```typescript
 codegraph_init({
     path: "Q:/develop/Repos/UCTornado",
@@ -971,13 +971,13 @@ codegraph_init({
 
 #### codegraph_update
 
-Aktualisiert den Index für eine oder mehrere Dateien.
+Updates the index for one or more files.
 
 ```typescript
 interface UpdateParams {
-    file: string;           // Relativer Pfad zur Datei
-    from_line?: number;     // Optional: Start der Änderung
-    to_line?: number;       // Optional: Ende der Änderung
+    file: string;           // Relative path to file
+    from_line?: number;     // Optional: Start of change
+    to_line?: number;       // Optional: End of change
 }
 
 interface UpdateResult {
@@ -990,14 +990,14 @@ interface UpdateResult {
 }
 ```
 
-**Beispiele:**
+**Examples:**
 ```typescript
-// Ganze Datei neu indexieren
+// Re-index entire file
 codegraph_update({
     file: "src/Core/Engine.cs"
 });
 
-// Nur Zeilen 45-52 aktualisieren
+// Update only lines 45-52
 codegraph_update({
     file: "src/Core/Engine.cs",
     from_line: 45,
@@ -1007,16 +1007,16 @@ codegraph_update({
 
 #### codegraph_query
 
-Sucht nach Items/Termen im Index.
+Searches for items/terms in the index.
 
 ```typescript
 interface QueryParams {
-    term: string;                    // Suchbegriff
+    term: string;                    // Search term
     mode?: 'exact' | 'contains' | 'starts_with' | 'regex';  // Default: 'exact'
-    include_dependencies?: boolean;  // Auch in verlinkten Projekten suchen
-    file_filter?: string;            // Glob-Pattern: "src/Core/**"
-    type_filter?: string[];          // Nur bestimmte Zeilentypen: ['code', 'comment']
-    limit?: number;                  // Max. Ergebnisse
+    include_dependencies?: boolean;  // Also search in linked projects
+    file_filter?: string;            // Glob pattern: "src/Core/**"
+    type_filter?: string[];          // Only certain line types: ['code', 'comment']
+    limit?: number;                  // Max. results
 }
 
 interface QueryResult {
@@ -1025,42 +1025,42 @@ interface QueryResult {
         file: string;
         line_number: number;
         line_type: string;
-        project?: string;   // Bei Dependencies: Name des Projekts
+        project?: string;   // For dependencies: Project name
     }>;
     total_matches: number;
 }
 ```
 
-**Beispiele:**
+**Examples:**
 ```typescript
-// Exakte Suche
+// Exact search
 codegraph_query({
     term: "PlayerHealth"
 });
 // → [{ file: "Engine.cs", line_number: 45, line_type: "code" }, ...]
 
-// Enthält-Suche
+// Contains search
 codegraph_query({
     term: "Player",
     mode: "contains"
 });
-// → Findet PlayerHealth, PlayerManager, UpdatePlayer, ...
+// → Finds PlayerHealth, PlayerManager, UpdatePlayer, ...
 
-// Mit Dependencies
+// With dependencies
 codegraph_query({
     term: "PyramidMesh",
     include_dependencies: true
 });
-// → Findet auch in LibPyramid3D
+// → Also finds in LibPyramid3D
 ```
 
 #### codegraph_signature
 
-Ruft die Signatur einer Datei ab.
+Gets the signature of a file.
 
 ```typescript
 interface SignatureParams {
-    file: string;           // Relativer Pfad
+    file: string;           // Relative path
 }
 
 interface SignatureResult {
@@ -1082,13 +1082,13 @@ interface SignatureResult {
 }
 ```
 
-**Beispiel:**
+**Example:**
 ```typescript
 codegraph_signature({
     file: "src/Core/TornadoEngine.cs"
 });
 // → {
-//     header_comments: "Hauptklasse für die Tornado-Simulation...",
+//     header_comments: "Main class for the tornado simulation...",
 //     types: [{ name: "TornadoEngine", kind: "class", line_number: 15 }],
 //     methods: [
 //         { name: "Initialize", prototype: "void Initialize(VortexConfig config)", ... },
@@ -1100,12 +1100,12 @@ codegraph_signature({
 
 #### codegraph_signatures
 
-Ruft Signaturen für mehrere Dateien ab.
+Gets signatures for multiple files.
 
 ```typescript
 interface SignaturesParams {
-    path?: string;          // Verzeichnis (Glob-Pattern)
-    files?: string[];       // Oder explizite Dateiliste
+    path?: string;          // Directory (glob pattern)
+    files?: string[];       // Or explicit file list
 }
 
 interface SignaturesResult {
@@ -1113,7 +1113,7 @@ interface SignaturesResult {
 }
 ```
 
-**Beispiel:**
+**Example:**
 ```typescript
 codegraph_signatures({
     path: "src/Core/**/*.cs"
@@ -1122,16 +1122,16 @@ codegraph_signatures({
 
 #### codegraph_summary
 
-Ruft die Projekt-Summary ab.
+Gets the project summary.
 
 ```typescript
 interface SummaryParams {
-    // keine Parameter
+    // no parameters
 }
 
 interface SummaryResult {
     name: string;
-    content: string;        // Markdown-Inhalt der summary.md
+    content: string;        // Markdown content of summary.md
     auto_generated: {
         entry_points: string[];
         main_classes: string[];
@@ -1142,13 +1142,13 @@ interface SummaryResult {
 
 #### codegraph_describe
 
-Ergänzt die Projekt-Summary.
+Extends the project summary.
 
 ```typescript
 interface DescribeParams {
     section: 'purpose' | 'architecture' | 'concepts' | 'patterns' | 'custom';
     content: string;
-    replace?: boolean;      // Existierenden Abschnitt ersetzen? Default: false (append)
+    replace?: boolean;      // Replace existing section? Default: false (append)
 }
 
 interface DescribeResult {
@@ -1157,23 +1157,23 @@ interface DescribeResult {
 }
 ```
 
-**Beispiel:**
+**Example:**
 ```typescript
 codegraph_describe({
     section: "purpose",
-    content: "3D-Tornado-Simulation für Wetterdaten-Visualisierung"
+    content: "3D tornado simulation for weather data visualization"
 });
 ```
 
 #### codegraph_tree
 
-Ruft den Dateibaum ab.
+Gets the file tree.
 
 ```typescript
 interface TreeParams {
-    path?: string;          // Unterverzeichnis, default: root
-    depth?: number;         // Max. Tiefe
-    include_stats?: boolean; // Item-Counts pro Datei
+    path?: string;          // Subdirectory, default: root
+    depth?: number;         // Max. depth
+    include_stats?: boolean; // Item counts per file
 }
 
 interface TreeResult {
@@ -1190,12 +1190,12 @@ interface TreeResult {
 
 #### codegraph_link
 
-Verknüpft eine Dependency.
+Links a dependency.
 
 ```typescript
 interface LinkParams {
-    path: string;           // Pfad zur anderen .codegraph oder zum Projekt
-    name?: string;          // Optionaler Anzeigename
+    path: string;           // Path to the other .codegraph or project
+    name?: string;          // Optional display name
 }
 
 interface LinkResult {
@@ -1206,7 +1206,7 @@ interface LinkResult {
 }
 ```
 
-**Beispiel:**
+**Example:**
 ```typescript
 codegraph_link({
     path: "Q:/develop/Repos/LibPyramid3D",
@@ -1216,11 +1216,11 @@ codegraph_link({
 
 #### codegraph_status
 
-Ruft Status und Statistiken ab.
+Gets status and statistics.
 
 ```typescript
 interface StatusParams {
-    // keine Parameter
+    // no parameters
 }
 
 interface StatusResult {
@@ -1243,122 +1243,122 @@ interface StatusResult {
 
 ---
 
-## 9. Workflow-Beispiele
+## 9. Workflow Examples
 
-### 9.1 Neues Projekt aufsetzen
+### 9.1 Setting Up a New Project
 
 ```typescript
-// 1. Projekt initialisieren
+// 1. Initialize project
 codegraph_init({
     path: "Q:/develop/Repos/UCTornado",
     name: "UCTornado",
     languages: ["csharp"]
 });
-// → Scannt alle .cs Dateien, erstellt Index
+// → Scans all .cs files, creates index
 
-// 2. Zweck dokumentieren
+// 2. Document purpose
 codegraph_describe({
     section: "purpose",
-    content: "3D-Tornado-Simulation für Wetterdaten-Visualisierung"
+    content: "3D tornado simulation for weather data visualization"
 });
 
-// 3. Library verknüpfen
+// 3. Link library
 codegraph_link({
     path: "Q:/develop/Repos/LibPyramid3D"
 });
 ```
 
-### 9.2 Unbekanntes Projekt verstehen
+### 9.2 Understanding an Unfamiliar Project
 
 ```typescript
-// 1. Summary lesen
+// 1. Read summary
 codegraph_summary();
-// → Gibt Überblick über Zweck, Entry Points, Dependencies
+// → Gives overview of purpose, entry points, dependencies
 
-// 2. Kern-Signaturen anschauen
+// 2. Look at core signatures
 codegraph_signatures({ path: "src/Core/**" });
-// → Alle Methoden und Klassen im Core-Verzeichnis
+// → All methods and classes in the Core directory
 
-// 3. Spezifischen Begriff suchen
+// 3. Search for specific term
 codegraph_query({ term: "Vortex", mode: "contains" });
-// → Wo wird "Vortex" überall verwendet?
+// → Where is "Vortex" used everywhere?
 ```
 
-### 9.3 Code ändern und Index aktuell halten
+### 9.3 Changing Code and Keeping Index Current
 
 ```typescript
-// 1. Ich ändere Engine.cs, Zeilen 120-135
-// (Claude macht Edit)
+// 1. I'm changing Engine.cs, lines 120-135
+// (Claude makes edit)
 
-// 2. Index aktualisieren
+// 2. Update index
 codegraph_update({
     file: "src/Core/Engine.cs",
     from_line: 120,
     to_line: 135
 });
 
-// 3. Weiterarbeiten mit aktuellem Index
+// 3. Continue working with current index
 ```
 
-### 9.4 Refactoring: Methode finden und umbenennen
+### 9.4 Refactoring: Finding and Renaming a Method
 
 ```typescript
-// 1. Wo wird "CalculateDamage" verwendet?
+// 1. Where is "CalculateDamage" used?
 codegraph_query({ term: "CalculateDamage" });
 // → Engine.cs:156, Player.cs:89, Enemy.cs:234
 
-// 2. Signatur anschauen
+// 2. Look at signature
 codegraph_signature({ file: "src/Core/Engine.cs" });
 // → void CalculateDamage(Entity target, int baseDamage)
 
-// 3. Alle Stellen bearbeiten...
-// 4. Nach Refactoring: Betroffene Dateien updaten
+// 3. Edit all locations...
+// 4. After refactoring: Update affected files
 codegraph_update({ file: "src/Core/Engine.cs" });
 codegraph_update({ file: "src/Entities/Player.cs" });
 codegraph_update({ file: "src/Entities/Enemy.cs" });
 ```
 
-### 9.5 Cross-Project Suche
+### 9.5 Cross-Project Search
 
 ```typescript
-// Ich arbeite in UCTornado und suche eine Methode aus LibPyramid3D
+// I'm working in UCTornado and looking for a method from LibPyramid3D
 codegraph_query({
     term: "RenderMesh",
     include_dependencies: true
 });
-// → UCTornado: src/Rendering/VortexRenderer.cs:45 (Aufruf)
-// → LibPyramid3D: src/Core/MeshRenderer.cs:123 (Definition)
+// → UCTornado: src/Rendering/VortexRenderer.cs:45 (call)
+// → LibPyramid3D: src/Core/MeshRenderer.cs:123 (definition)
 ```
 
 ---
 
-## 10. Projektstruktur
+## 10. Project Structure
 
 ```
 Q:\develop\Tools\CodeGraph\
 ├── package.json
 ├── tsconfig.json
 ├── README.md
-├── CODEGRAPH-SPEC.md          ← Diese Datei
+├── CODEGRAPH-SPEC.md          ← This file
 │
 ├── src/
 │   ├── index.ts               ← MCP Server Entry Point
 │   │
 │   ├── server/
 │   │   ├── mcp-server.ts      ← MCP Protocol Handler
-│   │   └── tools.ts           ← Tool-Registrierungen
+│   │   └── tools.ts           ← Tool registrations
 │   │
 │   ├── db/
 │   │   ├── database.ts        ← SQLite Wrapper
-│   │   ├── schema.ts          ← Tabellendefinitionen
+│   │   ├── schema.ts          ← Table definitions
 │   │   ├── queries.ts         ← Prepared Statements
-│   │   └── migrations/        ← Schema-Migrationen
+│   │   └── migrations/        ← Schema migrations
 │   │       └── 001-initial.sql
 │   │
 │   ├── parser/
-│   │   ├── extractor.ts       ← Haupt-Extraktor
-│   │   ├── tree-sitter.ts     ← Tree-sitter Integration
-│   │   ├── signature.ts       ← Signatur-Extraktion
+│   │   ├── extractor.ts       ← Main extractor
+│   │   ├── tree-sitter.ts     ← Tree-sitter integration
+│   │   ├── signature.ts       ← Signature extraction
 │   │   └── languages/
 │   │       ├── index.ts       ← Language Registry
 │   │       ├── csharp.ts      ← C# Keywords + Patterns
@@ -1380,12 +1380,12 @@ Q:\develop\Tools\CodeGraph\
 │   │   └── status.ts          ← codegraph_status
 │   │
 │   └── utils/
-│       ├── hash.ts            ← Datei-Hashing
-│       ├── glob.ts            ← Glob-Pattern Matching
+│       ├── hash.ts            ← File hashing
+│       ├── glob.ts            ← Glob pattern matching
 │       └── logger.ts          ← Logging
 │
 ├── test/
-│   ├── fixtures/              ← Test-Quelldateien
+│   ├── fixtures/              ← Test source files
 │   │   ├── sample.cs
 │   │   ├── sample.ts
 │   │   └── ...
@@ -1402,82 +1402,82 @@ Q:\develop\Tools\CodeGraph\
 │
 └── scripts/
     ├── build.ts
-    └── install-languages.ts   ← Tree-sitter Sprachen installieren
+    └── install-languages.ts   ← Install Tree-sitter languages
 ```
 
 ---
 
-## 11. Zukünftige Erweiterungen
+## 11. Future Extensions
 
-### 11.1 Vektor-Embeddings (Semantische Suche)
+### 11.1 Vector Embeddings (Semantic Search)
 
-Später könnte der Item-Vektorraum zu echten Vektor-Embeddings erweitert werden:
+Later, the Item vector space could be extended to real vector embeddings:
 
 ```typescript
-// Statt nur exakter/contains Suche:
+// Instead of just exact/contains search:
 codegraph_query({
-    term: "Spieler Gesundheit",  // Natürliche Sprache!
+    term: "player health",  // Natural language!
     mode: "semantic"
 });
-// → Findet "PlayerHealth", "CharacterHP", "HealthPoints", ...
+// → Finds "PlayerHealth", "CharacterHP", "HealthPoints", ...
 ```
 
-Technologie: SQLite mit vec0-Extension oder separate Vector-DB.
+Technology: SQLite with vec0 extension or separate vector DB.
 
-### 11.2 Änderungs-Tracking (Git Integration)
+### 11.2 Change Tracking (Git Integration)
 
 ```typescript
-// Automatisch nach git commit:
+// Automatically after git commit:
 codegraph_sync_git({
     from_commit: "abc123",
     to_commit: "HEAD"
 });
-// → Findet geänderte Dateien, updated nur diese
+// → Finds changed files, updates only those
 ```
 
 ### 11.3 Call Graph
 
-Zusätzlich zu Items: Wer ruft wen auf?
+In addition to Items: Who calls whom?
 
 ```typescript
 codegraph_callers({ method: "CalculateDamage" });
 // → [{ file: "Player.cs", method: "TakeDamage", line: 89 }, ...]
 
 codegraph_callees({ method: "Update" });
-// → Welche Methoden ruft Update auf?
+// → Which methods does Update call?
 ```
 
 ### 11.4 IDE Integration
 
-- VS Code Extension: Automatisches Update bei Speichern
-- Visual Studio Extension: Dasselbe
-- JetBrains Plugin: Dasselbe
+- VS Code Extension: Automatic update on save
+- Visual Studio Extension: Same
+- JetBrains Plugin: Same
 
 ### 11.5 Web Dashboard
 
-Lokales Web-UI zur Visualisierung:
-- Dateibaum mit Statistiken
-- Item-Wolke
-- Dependency-Graph
-- Suche mit Preview
+Local web UI for visualization:
+- File tree with statistics
+- Item cloud
+- Dependency graph
+- Search with preview
 
 ---
 
-## Anhang A: Glossar
+## Appendix A: Glossary
 
-| Begriff | Bedeutung |
-|---------|-----------|
-| **CodeGraph** | Das gesamte Tool/System |
-| **ProjectBase** | Die .codegraph-Instanz eines Projekts |
-| **Item** | Ein indizierter Begriff/Term (kein Sprach-Keyword) |
-| **Occurrence** | Ein Vorkommen eines Items an einer bestimmten Stelle |
-| **Signature** | Schnell-Profil einer Datei (Header-Kommentare + Prototypen) |
-| **Dependency** | Verknüpfung zu einer anderen ProjectBase |
-| **Tree-sitter** | Parser-Bibliothek für Syntax-Analyse |
+| Term | Meaning |
+|------|---------|
+| **CodeGraph** | The entire tool/system |
+| **ProjectBase** | The .codegraph instance of a project |
+| **Item** | An indexed term (not a language keyword) |
+| **Occurrence** | An occurrence of an Item at a specific location |
+| **Signature** | Quick profile of a file (header comments + prototypes) |
+| **Dependency** | Link to another ProjectBase |
+| **Tree-sitter** | Parser library for syntax analysis |
 
 ---
 
-## Anhang B: Konfiguration
+## Appendix B: Configuration
 
 ### MCP Server Registration (~/.claude/settings.json)
 
@@ -1495,7 +1495,7 @@ Lokales Web-UI zur Visualisierung:
 }
 ```
 
-### Projekt-spezifische Konfiguration (.codegraph/config.json)
+### Project-Specific Configuration (.codegraph/config.json)
 
 ```json
 {
@@ -1516,4 +1516,4 @@ Lokales Web-UI zur Visualisierung:
 
 ---
 
-*Ende der Spezifikation*
+*End of Specification*
