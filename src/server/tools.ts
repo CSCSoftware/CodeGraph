@@ -1,0 +1,977 @@
+/**
+ * MCP Tool definitions and handlers for CodeGraph
+ */
+
+import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, type QueryMode } from '../commands/index.js';
+import { openDatabase } from '../db/index.js';
+
+/**
+ * Register all available tools
+ */
+export function registerTools(): Tool[] {
+    return [
+        {
+            name: 'codegraph_init',
+            description: 'Initialize CodeGraph indexing for a project. Scans all source files and builds a searchable index of identifiers, methods, types, and signatures.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Absolute path to the project directory to index',
+                    },
+                    name: {
+                        type: 'string',
+                        description: 'Optional project name (defaults to directory name)',
+                    },
+                    exclude: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Additional glob patterns to exclude (e.g., ["**/test/**"])',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+        {
+            name: 'codegraph_query',
+            description: 'Search for terms/identifiers in the CodeGraph index. Returns file locations where the term appears.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    term: {
+                        type: 'string',
+                        description: 'The term to search for',
+                    },
+                    mode: {
+                        type: 'string',
+                        enum: ['exact', 'contains', 'starts_with'],
+                        description: 'Search mode: exact match, contains, or starts_with (default: exact)',
+                    },
+                    file_filter: {
+                        type: 'string',
+                        description: 'Glob pattern to filter files (e.g., "src/commands/**")',
+                    },
+                    type_filter: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Filter by line type: code, comment, method, struct, property',
+                    },
+                    limit: {
+                        type: 'number',
+                        description: 'Maximum number of results (default: 100)',
+                    },
+                },
+                required: ['path', 'term'],
+            },
+        },
+        {
+            name: 'codegraph_status',
+            description: 'Get CodeGraph server status and statistics for an indexed project',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory (optional, shows server status if not provided)',
+                    },
+                },
+                required: [],
+            },
+        },
+        {
+            name: 'codegraph_signature',
+            description: 'Get the signature of a single file: header comments, types (classes/structs/interfaces), and method prototypes. Useful for understanding a file without reading the full implementation.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    file: {
+                        type: 'string',
+                        description: 'Relative path to the file within the project (e.g., "src/Core/Engine.cs")',
+                    },
+                },
+                required: ['path', 'file'],
+            },
+        },
+        {
+            name: 'codegraph_signatures',
+            description: 'Get signatures for multiple files at once. Use a glob pattern or explicit file list. Returns header comments, types, and method prototypes for each file.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    pattern: {
+                        type: 'string',
+                        description: 'Glob pattern to match files (e.g., "src/Core/**/*.cs", "**/*.ts")',
+                    },
+                    files: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Explicit list of relative file paths (alternative to pattern)',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+        {
+            name: 'codegraph_update',
+            description: 'Re-index a single file. Use after editing a file to update the CodeGraph index. If the file is new, it will be added to the index. If unchanged (same hash), no update is performed.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    file: {
+                        type: 'string',
+                        description: 'Relative path to the file to update (e.g., "src/Core/Engine.cs")',
+                    },
+                },
+                required: ['path', 'file'],
+            },
+        },
+        {
+            name: 'codegraph_remove',
+            description: 'Remove a file from the CodeGraph index. Use when a file has been deleted from the project.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    file: {
+                        type: 'string',
+                        description: 'Relative path to the file to remove (e.g., "src/OldFile.cs")',
+                    },
+                },
+                required: ['path', 'file'],
+            },
+        },
+        {
+            name: 'codegraph_summary',
+            description: 'Get project summary including auto-detected entry points, main types, and languages. Also returns content from summary.md if it exists.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+        {
+            name: 'codegraph_tree',
+            description: 'Get the indexed file tree. Optionally filter by subdirectory, limit depth, or include statistics per file.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    subpath: {
+                        type: 'string',
+                        description: 'Subdirectory to list (default: project root)',
+                    },
+                    depth: {
+                        type: 'number',
+                        description: 'Maximum depth to traverse (default: unlimited)',
+                    },
+                    include_stats: {
+                        type: 'boolean',
+                        description: 'Include item/method/type counts per file',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+        {
+            name: 'codegraph_describe',
+            description: 'Add or update a section in the project summary (summary.md). Use to document project purpose, architecture, key concepts, or patterns.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    section: {
+                        type: 'string',
+                        enum: ['purpose', 'architecture', 'concepts', 'patterns', 'notes'],
+                        description: 'Section to update',
+                    },
+                    content: {
+                        type: 'string',
+                        description: 'Content to add to the section',
+                    },
+                    replace: {
+                        type: 'boolean',
+                        description: 'Replace existing section content (default: append)',
+                    },
+                },
+                required: ['path', 'section', 'content'],
+            },
+        },
+        {
+            name: 'codegraph_link',
+            description: 'Link a dependency project to enable cross-project queries. The dependency must have its own .codegraph index.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to current project with .codegraph directory',
+                    },
+                    dependency: {
+                        type: 'string',
+                        description: 'Path to dependency project to link',
+                    },
+                    name: {
+                        type: 'string',
+                        description: 'Optional display name for the dependency',
+                    },
+                },
+                required: ['path', 'dependency'],
+            },
+        },
+        {
+            name: 'codegraph_unlink',
+            description: 'Remove a linked dependency project.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to current project with .codegraph directory',
+                    },
+                    dependency: {
+                        type: 'string',
+                        description: 'Path to dependency project to unlink',
+                    },
+                },
+                required: ['path', 'dependency'],
+            },
+        },
+        {
+            name: 'codegraph_links',
+            description: 'List all linked dependency projects.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+    ];
+}
+
+/**
+ * Handle tool calls
+ */
+export async function handleToolCall(
+    name: string,
+    args: Record<string, unknown>
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+        switch (name) {
+            case 'codegraph_init':
+                return await handleInit(args);
+
+            case 'codegraph_query':
+                return handleQuery(args);
+
+            case 'codegraph_status':
+                return handleStatus(args);
+
+            case 'codegraph_signature':
+                return handleSignature(args);
+
+            case 'codegraph_signatures':
+                return handleSignatures(args);
+
+            case 'codegraph_update':
+                return handleUpdate(args);
+
+            case 'codegraph_remove':
+                return handleRemove(args);
+
+            case 'codegraph_summary':
+                return handleSummary(args);
+
+            case 'codegraph_tree':
+                return handleTree(args);
+
+            case 'codegraph_describe':
+                return handleDescribe(args);
+
+            case 'codegraph_link':
+                return handleLink(args);
+
+            case 'codegraph_unlink':
+                return handleUnlink(args);
+
+            case 'codegraph_links':
+                return handleLinks(args);
+
+            default:
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: `Unknown tool: ${name}`,
+                        },
+                    ],
+                };
+        }
+    } catch (error) {
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                },
+            ],
+        };
+    }
+}
+
+/**
+ * Handle codegraph_init
+ */
+async function handleInit(args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const path = args.path as string;
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = await init({
+        path,
+        name: args.name as string | undefined,
+        exclude: args.exclude as string[] | undefined,
+    });
+
+    if (result.success) {
+        let message = `✓ CodeGraph initialized for project\n\n`;
+        message += `Database: ${result.codegraphPath}/index.db\n`;
+        message += `Files indexed: ${result.filesIndexed}\n`;
+        message += `Items found: ${result.itemsFound}\n`;
+        message += `Methods found: ${result.methodsFound}\n`;
+        message += `Types found: ${result.typesFound}\n`;
+        message += `Duration: ${result.durationMs}ms`;
+
+        if (result.errors.length > 0) {
+            message += `\n\nWarnings (${result.errors.length}):\n`;
+            message += result.errors.slice(0, 10).map(e => `  - ${e}`).join('\n');
+            if (result.errors.length > 10) {
+                message += `\n  ... and ${result.errors.length - 10} more`;
+            }
+        }
+
+        return {
+            content: [{ type: 'text', text: message }],
+        };
+    } else {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.errors.join(', ')}` }],
+        };
+    }
+}
+
+/**
+ * Handle codegraph_query
+ */
+function handleQuery(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const term = args.term as string;
+
+    if (!path || !term) {
+        return {
+            content: [{ type: 'text', text: 'Error: path and term parameters are required' }],
+        };
+    }
+
+    const result = query({
+        path,
+        term,
+        mode: (args.mode as QueryMode) ?? 'exact',
+        fileFilter: args.file_filter as string | undefined,
+        typeFilter: args.type_filter as string[] | undefined,
+        limit: args.limit as number | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.matches.length === 0) {
+        return {
+            content: [{ type: 'text', text: `No matches found for "${term}" (mode: ${result.mode})` }],
+        };
+    }
+
+    // Format results
+    let message = `Found ${result.totalMatches} match(es) for "${term}" (mode: ${result.mode})`;
+    if (result.truncated) {
+        message += ` [showing first ${result.matches.length}]`;
+    }
+    message += '\n\n';
+
+    // Group by file
+    const byFile = new Map<string, Array<{ lineNumber: number; lineType: string }>>();
+    for (const match of result.matches) {
+        if (!byFile.has(match.file)) {
+            byFile.set(match.file, []);
+        }
+        byFile.get(match.file)!.push({ lineNumber: match.lineNumber, lineType: match.lineType });
+    }
+
+    for (const [file, lines] of byFile) {
+        message += `${file}\n`;
+        for (const line of lines) {
+            message += `  :${line.lineNumber} (${line.lineType})\n`;
+        }
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle codegraph_status
+ */
+function handleStatus(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string | undefined;
+
+    if (!path) {
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: JSON.stringify({
+                        status: 'running',
+                        version: '0.1.0',
+                        message: 'CodeGraph MCP server is running. Use codegraph_init to index a project.',
+                    }, null, 2),
+                },
+            ],
+        };
+    }
+
+    // Check if project has .codegraph
+    const codegraphDir = join(path, '.codegraph');
+    const dbPath = join(codegraphDir, 'index.db');
+
+    if (!existsSync(dbPath)) {
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: `No CodeGraph index found at ${path}. Run codegraph_init first.`,
+                },
+            ],
+        };
+    }
+
+    // Open database and get stats
+    const db = openDatabase(dbPath, true);
+    const stats = db.getStats();
+    const projectName = db.getMetadata('project_name') ?? 'Unknown';
+    const schemaVersion = db.getMetadata('schema_version') ?? 'Unknown';
+    db.close();
+
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    project: projectName,
+                    schemaVersion,
+                    statistics: stats,
+                    databasePath: dbPath,
+                }, null, 2),
+            },
+        ],
+    };
+}
+
+/**
+ * Handle codegraph_signature
+ */
+function handleSignature(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const file = args.file as string;
+
+    if (!path || !file) {
+        return {
+            content: [{ type: 'text', text: 'Error: path and file parameters are required' }],
+        };
+    }
+
+    const result = signature({ path, file });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    // Format output
+    let message = `# Signature: ${result.file}\n\n`;
+
+    // Header comments
+    if (result.headerComments) {
+        message += `## Header Comments\n\`\`\`\n${result.headerComments}\n\`\`\`\n\n`;
+    }
+
+    // Types
+    if (result.types.length > 0) {
+        message += `## Types (${result.types.length})\n`;
+        for (const t of result.types) {
+            message += `- **${t.kind}** \`${t.name}\` (line ${t.lineNumber})\n`;
+        }
+        message += '\n';
+    }
+
+    // Methods
+    if (result.methods.length > 0) {
+        message += `## Methods (${result.methods.length})\n`;
+        for (const m of result.methods) {
+            const modifiers: string[] = [];
+            if (m.visibility) modifiers.push(m.visibility);
+            if (m.isStatic) modifiers.push('static');
+            if (m.isAsync) modifiers.push('async');
+            const prefix = modifiers.length > 0 ? `[${modifiers.join(' ')}] ` : '';
+            message += `- ${prefix}\`${m.prototype}\` (line ${m.lineNumber})\n`;
+        }
+    }
+
+    if (result.types.length === 0 && result.methods.length === 0 && !result.headerComments) {
+        message += '_No signature data found for this file._\n';
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle codegraph_signatures
+ */
+function handleSignatures(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const pattern = args.pattern as string | undefined;
+    const files = args.files as string[] | undefined;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    if (!pattern && (!files || files.length === 0)) {
+        return {
+            content: [{ type: 'text', text: 'Error: either pattern or files parameter is required' }],
+        };
+    }
+
+    const result = signatures({ path, pattern, files });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.signatures.length === 0) {
+        const searchDesc = pattern ? `pattern "${pattern}"` : `files list`;
+        return {
+            content: [{ type: 'text', text: `No files found matching ${searchDesc}` }],
+        };
+    }
+
+    // Format output - summary view
+    let message = `# Signatures (${result.totalFiles} files)\n\n`;
+
+    for (const sig of result.signatures) {
+        if (!sig.success) {
+            message += `## ${sig.file}\n_Error: ${sig.error}_\n\n`;
+            continue;
+        }
+
+        message += `## ${sig.file}\n`;
+
+        // Compact summary
+        const parts: string[] = [];
+        if (sig.types.length > 0) {
+            const typesSummary = sig.types.map(t => `${t.kind} ${t.name}`).join(', ');
+            parts.push(`Types: ${typesSummary}`);
+        }
+        if (sig.methods.length > 0) {
+            parts.push(`Methods: ${sig.methods.length}`);
+        }
+
+        if (parts.length > 0) {
+            message += parts.join(' | ') + '\n';
+        }
+
+        // List methods compactly
+        if (sig.methods.length > 0) {
+            for (const m of sig.methods) {
+                const modifiers: string[] = [];
+                if (m.visibility) modifiers.push(m.visibility);
+                if (m.isStatic) modifiers.push('static');
+                if (m.isAsync) modifiers.push('async');
+                const prefix = modifiers.length > 0 ? `[${modifiers.join(' ')}] ` : '';
+                message += `  - ${prefix}${m.prototype} :${m.lineNumber}\n`;
+            }
+        }
+
+        message += '\n';
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle codegraph_update
+ */
+function handleUpdate(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const file = args.file as string;
+
+    if (!path || !file) {
+        return {
+            content: [{ type: 'text', text: 'Error: path and file parameters are required' }],
+        };
+    }
+
+    const result = update({ path, file });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    // Check if file was unchanged
+    if (result.error === 'File unchanged (hash match)') {
+        return {
+            content: [{ type: 'text', text: `File unchanged: ${result.file} (hash match, no update needed)` }],
+        };
+    }
+
+    let message = `✓ Updated: ${result.file}\n`;
+    message += `  Items: +${result.itemsAdded} / -${result.itemsRemoved}\n`;
+    message += `  Methods: ${result.methodsUpdated}\n`;
+    message += `  Types: ${result.typesUpdated}\n`;
+    message += `  Duration: ${result.durationMs}ms`;
+
+    return {
+        content: [{ type: 'text', text: message }],
+    };
+}
+
+/**
+ * Handle codegraph_remove
+ */
+function handleRemove(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const file = args.file as string;
+
+    if (!path || !file) {
+        return {
+            content: [{ type: 'text', text: 'Error: path and file parameters are required' }],
+        };
+    }
+
+    const result = remove({ path, file });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (!result.removed) {
+        return {
+            content: [{ type: 'text', text: `File not in index: ${result.file}` }],
+        };
+    }
+
+    return {
+        content: [{ type: 'text', text: `✓ Removed from index: ${result.file}` }],
+    };
+}
+
+/**
+ * Handle codegraph_summary
+ */
+function handleSummary(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = summary({ path });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    let message = `# Project: ${result.name}\n\n`;
+
+    // Auto-generated info
+    message += `## Overview\n`;
+    message += `- **Files indexed:** ${result.autoGenerated.fileCount}\n`;
+    message += `- **Languages:** ${result.autoGenerated.languages.join(', ') || 'None detected'}\n`;
+
+    if (result.autoGenerated.entryPoints.length > 0) {
+        message += `- **Entry points:** ${result.autoGenerated.entryPoints.join(', ')}\n`;
+    }
+
+    if (result.autoGenerated.mainTypes.length > 0) {
+        message += `\n## Main Types\n`;
+        for (const t of result.autoGenerated.mainTypes) {
+            message += `- ${t}\n`;
+        }
+    }
+
+    // User-provided summary content
+    if (result.content) {
+        message += `\n---\n\n${result.content}`;
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle codegraph_tree
+ */
+function handleTree(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = tree({
+        path,
+        subpath: args.subpath as string | undefined,
+        depth: args.depth as number | undefined,
+        includeStats: args.include_stats as boolean | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.entries.length === 0) {
+        return {
+            content: [{ type: 'text', text: `No files found in ${result.root}` }],
+        };
+    }
+
+    let message = `# File Tree: ${result.root} (${result.totalFiles} files)\n\n`;
+
+    for (const entry of result.entries) {
+        if (entry.type === 'directory') {
+            message += `📁 ${entry.path}/\n`;
+        } else {
+            let stats = '';
+            if (entry.itemCount !== undefined) {
+                stats = ` [${entry.itemCount} items, ${entry.methodCount} methods, ${entry.typeCount} types]`;
+            }
+            message += `  📄 ${entry.path}${stats}\n`;
+        }
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle codegraph_describe
+ */
+function handleDescribe(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const section = args.section as string;
+    const content = args.content as string;
+
+    if (!path || !section || !content) {
+        return {
+            content: [{ type: 'text', text: 'Error: path, section, and content parameters are required' }],
+        };
+    }
+
+    const validSections = ['purpose', 'architecture', 'concepts', 'patterns', 'notes'];
+    if (!validSections.includes(section)) {
+        return {
+            content: [{ type: 'text', text: `Error: section must be one of: ${validSections.join(', ')}` }],
+        };
+    }
+
+    const result = describe({
+        path,
+        section: section as 'purpose' | 'architecture' | 'concepts' | 'patterns' | 'notes',
+        content,
+        replace: args.replace as boolean | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    return {
+        content: [{ type: 'text', text: `✓ Updated section: ${result.section}` }],
+    };
+}
+
+/**
+ * Handle codegraph_link
+ */
+function handleLink(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const dependency = args.dependency as string;
+
+    if (!path || !dependency) {
+        return {
+            content: [{ type: 'text', text: 'Error: path and dependency parameters are required' }],
+        };
+    }
+
+    const result = link({
+        path,
+        dependency,
+        name: args.name as string | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    return {
+        content: [{ type: 'text', text: `✓ Linked: ${result.name} (${result.filesAvailable} files)` }],
+    };
+}
+
+/**
+ * Handle codegraph_unlink
+ */
+function handleUnlink(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const dependency = args.dependency as string;
+
+    if (!path || !dependency) {
+        return {
+            content: [{ type: 'text', text: 'Error: path and dependency parameters are required' }],
+        };
+    }
+
+    const result = unlink({ path, dependency });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (!result.removed) {
+        return {
+            content: [{ type: 'text', text: `Dependency not found: ${dependency}` }],
+        };
+    }
+
+    return {
+        content: [{ type: 'text', text: `✓ Unlinked: ${dependency}` }],
+    };
+}
+
+/**
+ * Handle codegraph_links
+ */
+function handleLinks(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = listLinks({ path });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.dependencies.length === 0) {
+        return {
+            content: [{ type: 'text', text: 'No linked dependencies.' }],
+        };
+    }
+
+    let message = `# Linked Dependencies (${result.dependencies.length})\n\n`;
+
+    for (const dep of result.dependencies) {
+        const status = dep.available ? '✓' : '✗';
+        const name = dep.name ?? 'unnamed';
+        message += `${status} **${name}**\n`;
+        message += `  Path: ${dep.path}\n`;
+        message += `  Files: ${dep.filesAvailable}\n`;
+        if (!dep.available) {
+            message += `  ⚠️ Not available (index missing)\n`;
+        }
+        message += '\n';
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}

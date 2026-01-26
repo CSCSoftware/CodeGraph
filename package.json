@@ -1,0 +1,46 @@
+{
+  "name": "codegraph",
+  "version": "0.1.0",
+  "description": "MCP Server providing persistent code indexing for Claude Code",
+  "main": "build/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && npm run copy-assets",
+    "copy-assets": "node -e \"require('fs').cpSync('src/db/schema.sql','build/db/schema.sql')\"",
+    "watch": "tsc --watch",
+    "start": "node build/index.js",
+    "dev": "tsc && node build/index.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "clean": "rimraf build"
+  },
+  "keywords": [
+    "mcp",
+    "claude",
+    "code-indexing",
+    "tree-sitter"
+  ],
+  "author": "Uwe Chalas",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "better-sqlite3": "^11.0.0",
+    "glob": "^10.0.0",
+    "tree-sitter": "^0.21.0",
+    "tree-sitter-c-sharp": "^0.21.0",
+    "tree-sitter-typescript": "^0.21.0",
+    "tree-sitter-rust": "^0.21.0",
+    "tree-sitter-python": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "ts-jest": "^29.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

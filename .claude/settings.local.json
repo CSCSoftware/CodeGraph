@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(node --input-type=module -e:*)",
+      "Bash(node build/index.js:*)",
+      "Bash(git init:*)",
+      "Bash(git config:*)"
+    ]
+  }
+}
