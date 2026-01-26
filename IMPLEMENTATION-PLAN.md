@@ -1,29 +1,29 @@
-# CodeGraph - Implementierungsplan
+# CodeGraph - Implementation Plan
 
-> **Erstellt:** 25. Januar 2026
-> **Ziel:** Funktionsfähiger MCP Server für Claude Code
+> **Created:** January 25, 2026
+> **Goal:** Functional MCP Server for Claude Code
 
 ---
 
-## Phase 1: Projekt-Setup
+## Phase 1: Project Setup
 
-### 1.1 Node.js Projekt initialisieren
-- [ ] `package.json` erstellen
-- [ ] TypeScript konfigurieren (`tsconfig.json`)
-- [ ] ESLint + Prettier einrichten
-- [ ] Build-Scripts definieren
+### 1.1 Initialize Node.js Project
+- [ ] Create `package.json`
+- [ ] Configure TypeScript (`tsconfig.json`)
+- [ ] Set up ESLint + Prettier
+- [ ] Define build scripts
 
-### 1.2 Dependencies installieren
+### 1.2 Install Dependencies
 ```
 @modelcontextprotocol/sdk    # MCP Server SDK
-better-sqlite3               # SQLite (synchron, schnell)
-tree-sitter                  # Parser-Engine
-tree-sitter-c-sharp          # C# Grammatik
-tree-sitter-typescript       # TypeScript Grammatik
-glob                         # Datei-Pattern-Matching
+better-sqlite3               # SQLite (synchronous, fast)
+tree-sitter                  # Parser engine
+tree-sitter-c-sharp          # C# grammar
+tree-sitter-typescript       # TypeScript grammar
+glob                         # File pattern matching
 ```
 
-### 1.3 Verzeichnisstruktur anlegen
+### 1.3 Create Directory Structure
 ```
 src/
 ├── index.ts
@@ -34,254 +34,254 @@ src/
 └── utils/
 ```
 
-**Ergebnis Phase 1:** Projekt kompiliert, leerer MCP Server startet.
+**Phase 1 Result:** Project compiles, empty MCP server starts.
 
 ---
 
-## Phase 2: Datenbank-Layer
+## Phase 2: Database Layer
 
-### 2.1 SQLite Schema implementieren
-- [ ] `src/db/schema.sql` aus Spec übernehmen
-- [ ] `src/db/database.ts` - Wrapper-Klasse erstellen
-- [ ] Migrations-System (für spätere Schema-Updates)
+### 2.1 Implement SQLite Schema
+- [ ] Copy `src/db/schema.sql` from spec
+- [ ] Create `src/db/database.ts` wrapper class
+- [ ] Migration system (for future schema updates)
 
 ### 2.2 Prepared Statements
-- [ ] `src/db/queries.ts` - Alle SQL-Queries als Prepared Statements
-- [ ] CRUD für: files, lines, items, occurrences, signatures, methods, types
+- [ ] `src/db/queries.ts` - All SQL queries as prepared statements
+- [ ] CRUD for: files, lines, items, occurrences, signatures, methods, types
 
-### 2.3 Testen
-- [ ] Unit-Tests für Datenbank-Operationen
-- [ ] Test-Fixture: Kleine SQLite-DB mit Beispieldaten
+### 2.3 Testing
+- [ ] Unit tests for database operations
+- [ ] Test fixture: Small SQLite DB with sample data
 
-**Ergebnis Phase 2:** Datenbank kann erstellt, befüllt, abgefragt werden.
+**Phase 2 Result:** Database can be created, populated, and queried.
 
 ---
 
-## Phase 3: Parser-System
+## Phase 3: Parser System
 
 ### 3.1 Tree-sitter Integration
-- [ ] `src/parser/tree-sitter.ts` - Tree-sitter initialisieren
-- [ ] Sprachen laden (C#, TypeScript initial)
+- [ ] `src/parser/tree-sitter.ts` - Initialize tree-sitter
+- [ ] Load languages (C#, TypeScript initially)
 
-### 3.2 Keyword-Filter
-- [ ] `src/parser/languages/csharp.ts` - C# Keywords
-- [ ] `src/parser/languages/typescript.ts` - TypeScript Keywords
-- [ ] `src/parser/languages/index.ts` - Language Registry
+### 3.2 Keyword Filters
+- [ ] `src/parser/languages/csharp.ts` - C# keywords
+- [ ] `src/parser/languages/typescript.ts` - TypeScript keywords
+- [ ] `src/parser/languages/index.ts` - Language registry
 
-### 3.3 Extraktor
-- [ ] `src/parser/extractor.ts` - Haupt-Extraktor
-  - AST traversieren
-  - Identifier extrahieren (ohne Keywords)
-  - Zeilentypen klassifizieren
-  - Items + Occurrences sammeln
+### 3.3 Extractor
+- [ ] `src/parser/extractor.ts` - Main extractor
+  - Traverse AST
+  - Extract identifiers (excluding keywords)
+  - Classify line types
+  - Collect items + occurrences
 
-### 3.4 Signatur-Extraktion
+### 3.4 Signature Extraction
 - [ ] `src/parser/signature.ts`
-  - Header-Kommentare sammeln
-  - Methoden-Prototypen extrahieren
-  - Klassen/Structs erfassen
+  - Collect header comments
+  - Extract method prototypes
+  - Capture classes/structs
 
-### 3.5 Testen
-- [ ] Unit-Tests mit Beispiel-Quelldateien
-- [ ] Test: C# Datei parsen → Items korrekt?
-- [ ] Test: Signatur-Extraktion korrekt?
+### 3.5 Testing
+- [ ] Unit tests with sample source files
+- [ ] Test: Parse C# file → Are items correct?
+- [ ] Test: Is signature extraction correct?
 
-**Ergebnis Phase 3:** Quelldateien können geparst werden, Items/Signaturen werden extrahiert.
+**Phase 3 Result:** Source files can be parsed, items/signatures are extracted.
 
 ---
 
-## Phase 4: Erstes MCP Tool - `codegraph_init`
+## Phase 4: First MCP Tool - `codegraph_init`
 
-### 4.1 MCP Server Grundgerüst
-- [ ] `src/server/mcp-server.ts` - Server-Klasse
-- [ ] `src/server/tools.ts` - Tool-Registrierung
-- [ ] `src/index.ts` - Entry Point
+### 4.1 MCP Server Foundation
+- [ ] `src/server/mcp-server.ts` - Server class
+- [ ] `src/server/tools.ts` - Tool registration
+- [ ] `src/index.ts` - Entry point
 
-### 4.2 Init-Command implementieren
+### 4.2 Implement Init Command
 - [ ] `src/commands/init.ts`
-  - Projektverzeichnis validieren
-  - `.codegraph/` Verzeichnis erstellen
-  - `index.db` initialisieren
-  - Alle Quelldateien finden (Glob)
-  - Jede Datei parsen und indexieren
-  - `summary.md` erstellen (auto-generiert)
-  - CLAUDE.md Dateien importieren → `docs.md`
+  - Validate project directory
+  - Create `.codegraph/` directory
+  - Initialize `index.db`
+  - Find all source files (glob)
+  - Parse and index each file
+  - Create `summary.md` (auto-generated)
+  - Import CLAUDE.md files → `docs.md`
 
-### 4.3 Testen
-- [ ] Integration-Test: `codegraph_init` auf Test-Projekt
-- [ ] Prüfen: Alle Dateien indexiert?
-- [ ] Prüfen: Items korrekt?
-- [ ] Prüfen: Signaturen korrekt?
+### 4.3 Testing
+- [ ] Integration test: `codegraph_init` on test project
+- [ ] Check: All files indexed?
+- [ ] Check: Items correct?
+- [ ] Check: Signatures correct?
 
-**Ergebnis Phase 4:** `codegraph_init` funktioniert, Projekt kann indexiert werden.
+**Phase 4 Result:** `codegraph_init` works, project can be indexed.
 
 ---
 
-## Phase 5: Query-Tool
+## Phase 5: Query Tool
 
-### 5.1 Query-Command implementieren
+### 5.1 Implement Query Command
 - [ ] `src/commands/query.ts`
-  - Exact Match
-  - Contains Match
-  - Starts-With Match
-  - Optional: Regex Match
+  - Exact match
+  - Contains match
+  - Starts-with match
+  - Optional: Regex match
 
-### 5.2 Ergebnis-Formatierung
-- [ ] Dateiname + Zeilennummer + Typ zurückgeben
-- [ ] Limit-Parameter
-- [ ] File-Filter (Glob-Pattern)
+### 5.2 Result Formatting
+- [ ] Return filename + line number + type
+- [ ] Limit parameter
+- [ ] File filter (glob pattern)
 
-### 5.3 Testen
-- [ ] Query "PlayerHealth" → findet Treffer
-- [ ] Query "Player" mode=contains → findet PlayerHealth, PlayerManager, etc.
+### 5.3 Testing
+- [ ] Query "PlayerHealth" → finds matches
+- [ ] Query "Player" mode=contains → finds PlayerHealth, PlayerManager, etc.
 
-**Ergebnis Phase 5:** Terme können gesucht werden.
+**Phase 5 Result:** Terms can be searched.
 
 ---
 
-## Phase 6: Signatur-Tools
+## Phase 6: Signature Tools
 
-### 6.1 Signature-Command
+### 6.1 Signature Command
 - [ ] `src/commands/signature.ts`
-  - Einzelne Datei-Signatur abrufen
-  - Formatierte Ausgabe
+  - Retrieve single file signature
+  - Formatted output
 
-### 6.2 Signatures-Command (Batch)
-- [ ] Mehrere Signaturen auf einmal (Glob-Pattern)
+### 6.2 Signatures Command (Batch)
+- [ ] Retrieve multiple signatures at once (glob pattern)
 
-### 6.3 Testen
-- [ ] Signatur für bekannte Datei abrufen
-- [ ] Alle Signaturen in `src/Core/` abrufen
+### 6.3 Testing
+- [ ] Retrieve signature for known file
+- [ ] Retrieve all signatures in `src/Core/`
 
-**Ergebnis Phase 6:** Datei-Signaturen abrufbar.
+**Phase 6 Result:** File signatures are retrievable.
 
 ---
 
-## Phase 7: Update-Mechanismus
+## Phase 7: Update Mechanism
 
-### 7.1 Update-Command
+### 7.1 Update Command
 - [ ] `src/commands/update.ts`
-  - Ganze Datei neu indexieren
-  - Oder: Nur Zeilenbereich (from_line, to_line)
+  - Re-index entire file
+  - Or: Only line range (from_line, to_line)
 
-### 7.2 Inkrementelles Update
-- [ ] Alte Daten für betroffene Zeilen entfernen
-- [ ] Neue Daten einfügen
-- [ ] Offset berechnen und Zeilennummern anpassen
+### 7.2 Incremental Update
+- [ ] Remove old data for affected lines
+- [ ] Insert new data
+- [ ] Calculate offset and adjust line numbers
 
-### 7.3 Remove-Command
+### 7.3 Remove Command
 - [ ] `src/commands/remove.ts`
-  - Datei aus Index entfernen (CASCADE)
+  - Remove file from index (CASCADE)
 
-### 7.4 Testen
-- [ ] Datei ändern → Update → Query findet neue Terme
-- [ ] Zeilen einfügen → Offset korrekt?
+### 7.4 Testing
+- [ ] Modify file → Update → Query finds new terms
+- [ ] Insert lines → Offset correct?
 
-**Ergebnis Phase 7:** Index kann aktualisiert werden.
+**Phase 7 Result:** Index can be updated.
 
 ---
 
-## Phase 8: Weitere Tools
+## Phase 8: Additional Tools
 
-### 8.1 Summary-Tools
-- [ ] `src/commands/summary.ts` - Summary abrufen
-- [ ] `src/commands/describe.ts` - Summary ergänzen
+### 8.1 Summary Tools
+- [ ] `src/commands/summary.ts` - Retrieve summary
+- [ ] `src/commands/describe.ts` - Add to summary
 
-### 8.2 Tree-Tool
-- [ ] `src/commands/tree.ts` - Dateibaum abrufen
+### 8.2 Tree Tool
+- [ ] `src/commands/tree.ts` - Retrieve file tree
 
-### 8.3 Link-Tool
-- [ ] `src/commands/link.ts` - Dependencies verknüpfen
-- [ ] Cross-Project Query implementieren
+### 8.3 Link Tool
+- [ ] `src/commands/link.ts` - Link dependencies
+- [ ] Implement cross-project query
 
-### 8.4 Status-Tool
-- [ ] `src/commands/status.ts` - Statistiken abrufen
+### 8.4 Status Tool
+- [ ] `src/commands/status.ts` - Retrieve statistics
 
-### 8.5 Docs-Tool
-- [ ] `src/commands/docs.ts` - CLAUDE.md Inhalte abrufen
-- [ ] `codegraph_update_docs` - Re-Import
+### 8.5 Docs Tool
+- [ ] `src/commands/docs.ts` - Retrieve CLAUDE.md contents
+- [ ] `codegraph_update_docs` - Re-import
 
-**Ergebnis Phase 8:** Alle geplanten Tools funktionieren.
+**Phase 8 Result:** All planned tools are functional.
 
 ---
 
 ## Phase 9: Integration & Polish
 
 ### 9.1 MCP Server Registration
-- [ ] Anleitung für `~/.claude/settings.json`
-- [ ] Test: Server startet in Claude Code
+- [ ] Instructions for `~/.claude/settings.json`
+- [ ] Test: Server starts in Claude Code
 
-### 9.2 Fehlerbehandlung
-- [ ] Alle Edge Cases abfangen
-- [ ] Hilfreiche Fehlermeldungen
+### 9.2 Error Handling
+- [ ] Catch all edge cases
+- [ ] Helpful error messages
 
-### 9.3 Performance-Optimierung
-- [ ] Große Projekte testen (1000+ Dateien)
-- [ ] Batch-Insert für initiales Indexieren
-- [ ] Query-Performance prüfen
+### 9.3 Performance Optimization
+- [ ] Test with large projects (1000+ files)
+- [ ] Batch insert for initial indexing
+- [ ] Check query performance
 
-### 9.4 Dokumentation
-- [ ] README.md erstellen
-- [ ] Beispiel-Workflows dokumentieren
+### 9.4 Documentation
+- [ ] Create README.md
+- [ ] Document example workflows
 
-**Ergebnis Phase 9:** Production-ready MCP Server.
-
----
-
-## Phase 10: Erste echte Nutzung
-
-### 10.1 Test mit echtem Projekt
-- [ ] LibPyramid3D indexieren
-- [ ] DebugViewer indexieren
-- [ ] Dependencies verknüpfen
-
-### 10.2 Feedback einarbeiten
-- [ ] Was funktioniert gut?
-- [ ] Was fehlt?
-- [ ] Was ist zu langsam?
+**Phase 9 Result:** Production-ready MCP server.
 
 ---
 
-## Optionale Erweiterungen (später)
+## Phase 10: First Real-World Usage
 
-- [ ] **Weitere Sprachen:** Python, Go, Rust, JavaScript
-- [ ] **Git Integration:** Auto-Update nach Commits
-- [ ] **Call Graph:** Wer ruft wen auf?
-- [ ] **Vektor-Embeddings:** Semantische Suche
-- [ ] **VS Code Extension:** Auto-Update beim Speichern
-- [ ] **Web Dashboard:** Visualisierung
+### 10.1 Test with Real Project
+- [ ] Index LibPyramid3D
+- [ ] Index DebugViewer
+- [ ] Link dependencies
 
----
-
-## Zeitschätzung
-
-| Phase | Aufwand |
-|-------|---------|
-| Phase 1: Setup | Klein |
-| Phase 2: Datenbank | Mittel |
-| Phase 3: Parser | Groß (Tree-sitter Lernkurve) |
-| Phase 4: Init | Mittel |
-| Phase 5: Query | Klein |
-| Phase 6: Signatures | Klein |
-| Phase 7: Update | Mittel |
-| Phase 8: Weitere Tools | Mittel |
-| Phase 9: Polish | Mittel |
-| Phase 10: Test | Klein |
+### 10.2 Incorporate Feedback
+- [ ] What works well?
+- [ ] What's missing?
+- [ ] What's too slow?
 
 ---
 
-## Empfohlene Reihenfolge für erste Session
+## Optional Extensions (Later)
 
-1. **Phase 1 komplett** - Projekt muss kompilieren
-2. **Phase 2 komplett** - Datenbank muss funktionieren
-3. **Phase 3.1-3.3** - Parser Grundgerüst (ohne Signaturen)
-4. **Phase 4** - Init-Tool (vereinfacht, ohne Signaturen)
-5. **Phase 5** - Query-Tool
-
-→ Dann hast du ein **minimal funktionsfähiges CodeGraph** das du bereits nutzen kannst!
-
-Signaturen, Update, und weitere Tools können danach iterativ ergänzt werden.
+- [ ] **Additional Languages:** Python, Go, Rust, JavaScript
+- [ ] **Git Integration:** Auto-update after commits
+- [ ] **Call Graph:** Who calls whom?
+- [ ] **Vector Embeddings:** Semantic search
+- [ ] **VS Code Extension:** Auto-update on save
+- [ ] **Web Dashboard:** Visualization
 
 ---
 
-*Ende des Implementierungsplans*
+## Time Estimates
+
+| Phase | Effort |
+|-------|--------|
+| Phase 1: Setup | Small |
+| Phase 2: Database | Medium |
+| Phase 3: Parser | Large (tree-sitter learning curve) |
+| Phase 4: Init | Medium |
+| Phase 5: Query | Small |
+| Phase 6: Signatures | Small |
+| Phase 7: Update | Medium |
+| Phase 8: Additional Tools | Medium |
+| Phase 9: Polish | Medium |
+| Phase 10: Testing | Small |
+
+---
+
+## Recommended Order for First Session
+
+1. **Phase 1 complete** - Project must compile
+2. **Phase 2 complete** - Database must work
+3. **Phase 3.1-3.3** - Parser foundation (without signatures)
+4. **Phase 4** - Init tool (simplified, without signatures)
+5. **Phase 5** - Query tool
+
+→ Then you have a **minimally functional CodeGraph** that you can already use!
+
+Signatures, update, and additional tools can be added iteratively afterwards.
+
+---
+
+*End of implementation plan*

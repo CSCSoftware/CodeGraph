@@ -1,214 +1,247 @@
 # CodeGraph
 
-**Persistente Code-Indizierung für Claude Code**
+**Persistent Code Indexing for Claude Code**
 
-## Das Problem
+## The Problem
 
-Wenn Claude Code (der KI-Assistent von Anthropic) mit einem Softwareprojekt arbeitet, muss er bei jeder Suche:
+When Claude Code (Anthropic's AI assistant) works with a software project, it must:
 
-1. **Grep** durch tausende Dateien ausführen
-2. **Hunderte Zeilen lesen** um Kontext zu verstehen
-3. Den **Kontext vollmüllen** mit Suchläufen
-4. Bei einer neuen Session **alles vergessen** und von vorn beginnen
+1. **Grep** through thousands of files for every search
+2. **Read hundreds of lines** to understand context
+3. **Fill up the context window** with search results
+4. **Forget everything** when starting a new session
 
-Bei einem unbekannten Projekt muss Claude erst die komplette Struktur erkunden, Einstiegspunkte suchen, massenhaft Dateien lesen - das frisst Zeit und Kontext-Token.
+For an unfamiliar project, Claude must explore the entire structure, find entry points, read countless files - consuming time and context tokens.
 
-## Die Lösung
+## The Solution
 
-CodeGraph ist ein **lokaler Index-Service**, der einmal pro Projekt alle relevanten Informationen extrahiert und in einer SQLite-Datenbank speichert:
+CodeGraph is a **local index service** that extracts all relevant information from a project once and stores it in a SQLite database:
 
-- **Items:** Alle Identifier (Variablen, Funktionen, Klassen) - aber keine Sprach-Keywords wie `if`, `class`, `public`
-- **Signaturen:** Schnell-Profile jeder Datei (Klassen, Methoden-Prototypen, Header-Kommentare)
-- **Projekt-Summary:** Automatisch erkannte Entry Points, Haupt-Klassen, verwendete Sprachen
-- **Dependencies:** Verknüpfungen zu anderen Projekten für projektübergreifende Suchen
+- **Items:** All identifiers (variables, functions, classes) - but no language keywords like `if`, `class`, `public`
+- **Signatures:** Quick profiles of each file (classes, method prototypes, header comments)
+- **Project Summary:** Automatically detected entry points, main classes, languages used
+- **Dependencies:** Links to other projects for cross-project queries
 
-## Vorher vs. Nachher
+## Before vs. After
 
-**Vorher:**
+**Before:**
 ```
-Claude: "Ich suche nach PlayerHealth..."
-→ grep "PlayerHealth" → 200 Treffer in 40 Dateien
-→ read Datei1.cs → read Datei2.cs → read Datei3.cs...
-→ 5+ Minuten, viel Kontext verbraucht
+Claude: "I'm looking for PlayerHealth..."
+→ grep "PlayerHealth" → 200 hits in 40 files
+→ read File1.cs → read File2.cs → read File3.cs...
+→ 5+ minutes, lots of context consumed
 ```
 
-**Nachher:**
+**After:**
 ```
 Claude: codegraph_query({ term: "PlayerHealth" })
 → Engine.cs:45 (code)
 → Engine.cs:892 (comment)
 → Player.cs:23 (code)
-→ Fertig. Drei gezielte Stellen in Millisekunden.
+→ Done. Three precise locations in milliseconds.
 ```
 
-**Unbekanntes Projekt verstehen - Vorher:**
+**Understanding an unfamiliar project - Before:**
 ```
 ls → tree → grep "main" → read Program.cs → read Engine.cs...
-→ 5+ Minuten, viel Kontext verbraucht
+→ 5+ minutes, lots of context consumed
 ```
 
-**Nachher:**
+**After:**
 ```
-codegraph_summary() → Sofortiger Überblick
-codegraph_signatures({ pattern: "src/Core/**" }) → Alle Klassen und Methoden
-→ 10 Sekunden, minimaler Kontext
-```
-
-## Wie funktioniert es?
-
-### 1. Indexierung (einmalig pro Projekt)
-
-```
-codegraph_init({ path: "C:/MeinProjekt" })
+codegraph_summary() → Instant overview
+codegraph_signatures({ pattern: "src/Core/**" }) → All classes and methods
+→ 10 seconds, minimal context
 ```
 
-CodeGraph scannt alle Quelldateien und extrahiert mit **Tree-sitter** (einem Parser-Framework):
-- Alle Identifier und wo sie vorkommen
-- Methoden-Signaturen (nur die Prototypen, keine Implementierung)
-- Klassen, Structs, Interfaces
-- Header-Kommentare
+## How It Works
 
-Das Ergebnis wird in `.codegraph/index.db` gespeichert (SQLite).
+### 1. Indexing (once per project)
 
-### 2. Suchen
+```
+codegraph_init({ path: "/path/to/MyProject" })
+```
+
+CodeGraph scans all source files and extracts using **Tree-sitter** (a parser framework):
+- All identifiers and where they occur
+- Method signatures (prototypes only, not implementation)
+- Classes, structs, interfaces
+- Header comments
+
+The result is stored in `.codegraph/index.db` (SQLite).
+
+### 2. Searching
 
 ```
 codegraph_query({ term: "Calculate", mode: "starts_with" })
 ```
 
-Findet alle Identifier die mit "Calculate" beginnen - in Millisekunden statt Sekunden.
+Finds all identifiers starting with "Calculate" - in milliseconds instead of seconds.
 
-### 3. Datei-Signaturen
+### 3. File Signatures
 
 ```
 codegraph_signature({ file: "src/Core/Engine.cs" })
 ```
 
-Liefert sofort:
-- Header-Kommentare der Datei
-- Alle Klassen/Structs
-- Alle Methoden-Prototypen mit Zeilennummern
+Instantly returns:
+- Header comments of the file
+- All classes/structs
+- All method prototypes with line numbers
 
-Ohne die gesamte Datei lesen zu müssen.
+Without reading the entire file.
 
-### 4. Update nach Änderungen
+### 4. Update After Changes
 
 ```
 codegraph_update({ file: "src/Core/Engine.cs" })
 ```
 
-Aktualisiert nur die geänderte Datei - nicht das ganze Projekt neu indexieren.
+Updates only the changed file - no need to re-index the whole project.
 
-## Unterstützte Sprachen
+## Supported Languages
 
-| Sprache | Dateitypen |
-|---------|------------|
+| Language | File Types |
+|----------|------------|
 | C# | `.cs` |
 | TypeScript | `.ts`, `.tsx` |
 | JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` |
 | Rust | `.rs` |
 | Python | `.py`, `.pyw` |
 
-## Technologie
+## Technology
 
 - **Runtime:** Node.js / TypeScript
-- **Parser:** Tree-sitter (versteht 100+ Sprachen, unterscheidet Identifier von Keywords)
-- **Datenbank:** SQLite mit WAL-Mode (schnell, eine Datei, keine Abhängigkeiten)
-- **Integration:** MCP (Model Context Protocol) - der Standard für Claude Code Tools
+- **Parser:** Tree-sitter (understands 100+ languages, distinguishes identifiers from keywords)
+- **Database:** SQLite with WAL mode (fast, single file, no dependencies)
+- **Integration:** MCP (Model Context Protocol) - the standard for Claude Code tools
 
 ## Installation
 
-CodeGraph läuft als MCP-Server und wird in Claude Code registriert.
+CodeGraph runs as an MCP server and is registered with Claude Code.
 
-1. Repository klonen
+1. Clone the repository
 2. `npm install && npm run build`
-3. In `~/.claude/settings.json` eintragen:
+3. Add to your `~/.claude.json` (for Claude Code CLI):
 
 ```json
 {
   "mcpServers": {
     "codegraph": {
+      "type": "stdio",
       "command": "node",
-      "args": ["/pfad/zu/CodeGraph/build/index.js"]
+      "args": ["/path/to/CodeGraph/build/index.js"],
+      "env": {}
     }
   }
 }
 ```
 
-4. Claude Code neu starten
+4. Restart Claude Code
 
-## Verfügbare Tools
+## Making Claude Actually Use CodeGraph
 
-| Tool | Beschreibung |
-|------|--------------|
-| `codegraph_init` | Projekt indexieren |
-| `codegraph_query` | Begriffe suchen (exact/contains/starts_with) |
-| `codegraph_signature` | Signatur einer Datei abrufen |
-| `codegraph_signatures` | Signaturen mehrerer Dateien (Glob-Pattern) |
-| `codegraph_update` | Einzelne Datei neu indexieren |
-| `codegraph_remove` | Datei aus Index entfernen |
-| `codegraph_summary` | Projekt-Übersicht abrufen |
-| `codegraph_tree` | Dateibaum mit Statistiken |
-| `codegraph_describe` | Projekt-Dokumentation ergänzen |
-| `codegraph_link` | Dependency-Projekt verknüpfen |
-| `codegraph_links` | Verknüpfte Projekte auflisten |
-| `codegraph_status` | Index-Statistiken |
+**Important:** Just installing the MCP server isn't enough - you need to tell Claude when to use it!
 
-## Beispiel-Workflow
+Add this to your global `~/.claude/CLAUDE.md`:
+
+```markdown
+### CodeGraph (MCP Server) - ALWAYS USE FIRST!
+**Persistent code index for fast searches.** Registered as MCP server `codegraph`.
+
+**CRITICAL - FOR EVERY CODE SEARCH:**
+1. **FIRST check:** Does `.codegraph/` exist in the project?
+2. **If yes:** Use `codegraph_query` INSTEAD of Grep/Glob!
+3. **If no:** Offer to run `codegraph_init` once, then use it
+
+**NEVER use Grep/Glob for code searches when .codegraph/ exists!**
+
+**CodeGraph knows all functions/methods with signatures!**
+- `codegraph_query` finds function names: term="Calculate", mode="starts_with" → all Calculate* methods
+- `codegraph_signature` shows ALL methods of a file with parameters and line numbers
+- `codegraph_signatures` with pattern="src/*.cs" → methods from multiple files
+
+**Example questions → CodeGraph tool:**
+- "Where is X calculated?" → `codegraph_query` with term="X" or mode="contains"
+- "What methods does class Y have?" → `codegraph_signature` for the file
+- "Show me all Update functions" → `codegraph_query` term="Update" mode="starts_with"
+- "What does this file do?" → `codegraph_signature`
+- "Project overview" → `codegraph_summary` + `codegraph_tree`
+```
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `codegraph_init` | Index a project |
+| `codegraph_query` | Search terms (exact/contains/starts_with) |
+| `codegraph_signature` | Get signature of a single file |
+| `codegraph_signatures` | Get signatures of multiple files (glob pattern) |
+| `codegraph_update` | Re-index a single file |
+| `codegraph_remove` | Remove file from index |
+| `codegraph_summary` | Get project overview |
+| `codegraph_tree` | Get file tree with statistics |
+| `codegraph_describe` | Add project documentation |
+| `codegraph_link` | Link dependency project |
+| `codegraph_unlink` | Remove linked dependency |
+| `codegraph_links` | List linked projects |
+| `codegraph_status` | Get index statistics |
+
+## Example Workflow
 
 ```typescript
-// 1. Neues Projekt indexieren
-codegraph_init({ path: "Q:/develop/MeinProjekt" })
-// → 150 Dateien indexiert, 5000 Items gefunden
+// 1. Index a new project
+codegraph_init({ path: "/home/user/MyProject" })
+// → 150 files indexed, 5000 items found
 
-// 2. Projekt verstehen
+// 2. Understand the project
 codegraph_summary({ path: "..." })
-// → Entry Points: Program.cs, Haupt-Klassen: GameEngine, Player, Enemy
+// → Entry Points: Program.cs, Main classes: GameEngine, Player, Enemy
 
-// 3. Gezielt suchen
+// 3. Search precisely
 codegraph_query({ term: "Damage", mode: "contains" })
 // → CalculateDamage in Engine.cs:156, TakeDamage in Player.cs:89, ...
 
-// 4. Signatur anschauen
+// 4. View signature
 codegraph_signature({ file: "src/Core/Engine.cs" })
 // → class GameEngine, void Initialize(), void Update(float dt), ...
 
-// 5. Nach Änderung aktualisieren
+// 5. Update after changes
 codegraph_update({ file: "src/Core/Engine.cs" })
-// → 3 neue Items, 1 entfernt
+// → 3 new items, 1 removed
 ```
 
 ## Performance
 
-| Projekt | Sprache | Dateien | Items | Indexierung |
-|---------|---------|---------|-------|-------------|
+| Project | Language | Files | Items | Indexing Time |
+|---------|----------|-------|-------|---------------|
 | CodeGraph | TypeScript | 19 | ~1200 | <1s |
 | RemoteDebug | C# | 10 | 1900 | <1s |
 | LibPyramid3D | Rust | 18 | 3000 | <1s |
 | MeloTTS | Python | 56 | 4100 | ~2s |
 
-Suchen dauern typischerweise 1-10ms.
+Searches typically take 1-10ms.
 
-## Projektstruktur
+## Project Structure
 
 ```
-.codegraph/           ← Wird im Projekt erstellt
-├── index.db          ← SQLite Datenbank
-└── summary.md        ← Optionale Projekt-Dokumentation
+.codegraph/           ← Created in your project
+├── index.db          ← SQLite database
+└── summary.md        ← Optional project documentation
 
-CodeGraph/            ← Dieses Repository
+CodeGraph/            ← This repository
 ├── src/
-│   ├── commands/     ← Tool-Implementierungen
-│   ├── db/           ← SQLite-Wrapper
-│   ├── parser/       ← Tree-sitter Integration
-│   └── server/       ← MCP-Server
-└── build/            ← Kompilierter Output
+│   ├── commands/     ← Tool implementations
+│   ├── db/           ← SQLite wrapper
+│   ├── parser/       ← Tree-sitter integration
+│   └── server/       ← MCP server
+└── build/            ← Compiled output
 ```
 
-## Lizenz
+## License
 
 MIT
 
-## Autoren
+## Authors
 
 Uwe Chalas & Claude (Rudi)
