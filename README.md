@@ -71,8 +71,12 @@ The index lives in `.codegraph/index.db` (SQLite) - fast, portable, no external 
 | JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` |
 | Rust | `.rs` |
 | Python | `.py`, `.pyw` |
-
-More languages coming soon (C/C++, Go, Java, etc.)
+| C | `.c`, `.h` |
+| C++ | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hxx` |
+| Java | `.java` |
+| Go | `.go` |
+| PHP | `.php` |
+| Ruby | `.rb`, `.rake` |
 
 ## Quick Start
 
@@ -158,6 +162,14 @@ codegraph_init({ path: "/path/to/your/project" })
 | `codegraph_unlink` | Remove linked project |
 | `codegraph_links` | List linked projects |
 | `codegraph_status` | Index statistics |
+| `codegraph_scan` | Find indexed projects in directory tree |
+
+## CLI Usage
+
+```bash
+node build/index.js scan Q:/develop   # Find all indexed projects
+node build/index.js init ./myproject  # Index a project from command line
+```
 
 ## Performance
 
