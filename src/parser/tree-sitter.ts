@@ -9,8 +9,16 @@ import CSharp from 'tree-sitter-c-sharp';
 import TypeScript from 'tree-sitter-typescript';
 import Rust from 'tree-sitter-rust';
 import Python from 'tree-sitter-python';
+import C from 'tree-sitter-c';
+import Cpp from 'tree-sitter-cpp';
+import Java from 'tree-sitter-java';
+import Go from 'tree-sitter-go';
+import Php from 'tree-sitter-php';
+import Ruby from 'tree-sitter-ruby';
 
-export type SupportedLanguage = 'csharp' | 'typescript' | 'javascript' | 'rust' | 'python';
+export type SupportedLanguage =
+    | 'csharp' | 'typescript' | 'javascript' | 'rust' | 'python'
+    | 'c' | 'cpp' | 'java' | 'go' | 'php' | 'ruby';
 
 // File extension to language mapping
 const EXTENSION_MAP: Record<string, SupportedLanguage> = {
@@ -24,6 +32,18 @@ const EXTENSION_MAP: Record<string, SupportedLanguage> = {
     '.rs': 'rust',
     '.py': 'python',
     '.pyw': 'python',
+    '.c': 'c',
+    '.h': 'c',
+    '.cpp': 'cpp',
+    '.cc': 'cpp',
+    '.cxx': 'cpp',
+    '.hpp': 'cpp',
+    '.hxx': 'cpp',
+    '.java': 'java',
+    '.go': 'go',
+    '.php': 'php',
+    '.rb': 'ruby',
+    '.rake': 'ruby',
 };
 
 // Cached parsers per language
@@ -55,6 +75,24 @@ export function getParser(language: SupportedLanguage): Parser {
             break;
         case 'python':
             parser.setLanguage(Python);
+            break;
+        case 'c':
+            parser.setLanguage(C);
+            break;
+        case 'cpp':
+            parser.setLanguage(Cpp);
+            break;
+        case 'java':
+            parser.setLanguage(Java);
+            break;
+        case 'go':
+            parser.setLanguage(Go);
+            break;
+        case 'php':
+            parser.setLanguage(Php.php);
+            break;
+        case 'ruby':
+            parser.setLanguage(Ruby);
             break;
         default:
             throw new Error(`Unsupported language: ${language}`);
