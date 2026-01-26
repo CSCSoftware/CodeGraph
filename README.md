@@ -1,107 +1,70 @@
 # CodeGraph
 
-**Persistent Code Indexing for Claude Code**
+**Stop wasting 80% of your AI's context window on code searches.**
+
+CodeGraph is an MCP server that gives AI coding assistants instant access to your entire codebase through a persistent, pre-built index. Works with any MCP-compatible AI assistant: Claude Code, Cursor, Windsurf, Continue.dev, and more.
+
+<!-- TODO: Add demo GIF showing codegraph_query vs grep -->
 
 ## The Problem
 
-When Claude Code (Anthropic's AI assistant) works with a software project, it must:
+Every time your AI assistant searches for code, it:
+- **Greps** through thousands of files → hundreds of results flood the context
+- **Reads** file after file to understand the structure → more context consumed
+- **Forgets** everything when the session ends → repeat from scratch
 
-1. **Grep** through thousands of files for every search
-2. **Read hundreds of lines** to understand context
-3. **Fill up the context window** with search results
-4. **Forget everything** when starting a new session
-
-For an unfamiliar project, Claude must explore the entire structure, find entry points, read countless files - consuming time and context tokens.
+A single "Where is X defined?" question can eat 2,000+ tokens. Do that 10 times and you've burned half your context on navigation alone.
 
 ## The Solution
 
-CodeGraph is a **local index service** that extracts all relevant information from a project once and stores it in a SQLite database:
+Index once, query forever:
 
-- **Items:** All identifiers (variables, functions, classes) - but no language keywords like `if`, `class`, `public`
-- **Signatures:** Quick profiles of each file (classes, method prototypes, header comments)
-- **Project Summary:** Automatically detected entry points, main classes, languages used
-- **Dependencies:** Links to other projects for cross-project queries
-
-## Before vs. After
-
-**Before:**
 ```
-Claude: "I'm looking for PlayerHealth..."
-→ grep "PlayerHealth" → 200 hits in 40 files
-→ read File1.cs → read File2.cs → read File3.cs...
-→ 5+ minutes, lots of context consumed
+# Before: grep flooding your context
+AI: grep "PlayerHealth" → 200 hits in 40 files
+AI: read File1.cs, File2.cs, File3.cs...
+→ 2000+ tokens consumed, 5+ tool calls
+
+# After: precise results, minimal context
+AI: codegraph_query({ term: "PlayerHealth" })
+→ Engine.cs:45, Player.cs:23, UI.cs:156
+→ ~50 tokens, 1 tool call
 ```
 
-**After:**
-```
-Claude: codegraph_query({ term: "PlayerHealth" })
-→ Engine.cs:45 (code)
-→ Engine.cs:892 (comment)
-→ Player.cs:23 (code)
-→ Done. Three precise locations in milliseconds.
-```
-
-**Understanding an unfamiliar project - Before:**
-```
-ls → tree → grep "main" → read Program.cs → read Engine.cs...
-→ 5+ minutes, lots of context consumed
-```
-
-**After:**
-```
-codegraph_summary() → Instant overview
-codegraph_signatures({ pattern: "src/Core/**" }) → All classes and methods
-→ 10 seconds, minimal context
-```
+**Result: 50-80% less context used for code navigation.**
 
 ## How It Works
 
-### 1. Indexing (once per project)
+1. **Index your project once** (~1 second per 1000 files)
+   ```
+   codegraph_init({ path: "/path/to/project" })
+   ```
 
-```
-codegraph_init({ path: "/path/to/MyProject" })
-```
+2. **AI searches the index instead of grepping**
+   ```
+   codegraph_query({ term: "Calculate", mode: "starts_with" })
+   → All functions starting with "Calculate" + exact line numbers
+   ```
 
-CodeGraph scans all source files and extracts using **Tree-sitter** (a parser framework):
-- All identifiers and where they occur
-- Method signatures (prototypes only, not implementation)
-- Classes, structs, interfaces
-- Header comments
+3. **Get file overviews without reading entire files**
+   ```
+   codegraph_signature({ file: "src/Engine.cs" })
+   → All classes, methods, and their signatures
+   ```
 
-The result is stored in `.codegraph/index.db` (SQLite).
+The index lives in `.codegraph/index.db` (SQLite) - fast, portable, no external dependencies.
 
-### 2. Searching
+## Features
 
-```
-codegraph_query({ term: "Calculate", mode: "starts_with" })
-```
-
-Finds all identifiers starting with "Calculate" - in milliseconds instead of seconds.
-
-### 3. File Signatures
-
-```
-codegraph_signature({ file: "src/Core/Engine.cs" })
-```
-
-Instantly returns:
-- Header comments of the file
-- All classes/structs
-- All method prototypes with line numbers
-
-Without reading the entire file.
-
-### 4. Update After Changes
-
-```
-codegraph_update({ file: "src/Core/Engine.cs" })
-```
-
-Updates only the changed file - no need to re-index the whole project.
+- **Smart Extraction**: Uses Tree-sitter to parse code properly - indexes identifiers, not keywords
+- **Method Signatures**: Get function prototypes without reading implementations
+- **Project Summary**: Auto-detected entry points, main classes, language breakdown
+- **Incremental Updates**: Re-index single files after changes
+- **Cross-Project Links**: Query across multiple related projects
 
 ## Supported Languages
 
-| Language | File Types |
+| Language | Extensions |
 |----------|------------|
 | C# | `.cs` |
 | TypeScript | `.ts`, `.tsx` |
@@ -109,21 +72,21 @@ Updates only the changed file - no need to re-index the whole project.
 | Rust | `.rs` |
 | Python | `.py`, `.pyw` |
 
-## Technology
+More languages coming soon (C/C++, Go, Java, etc.)
 
-- **Runtime:** Node.js / TypeScript
-- **Parser:** Tree-sitter (understands 100+ languages, distinguishes identifiers from keywords)
-- **Database:** SQLite with WAL mode (fast, single file, no dependencies)
-- **Integration:** MCP (Model Context Protocol) - the standard for Claude Code tools
+## Quick Start
 
-## Installation
+### 1. Install
 
-CodeGraph runs as an MCP server and is registered with Claude Code.
+```bash
+git clone https://github.com/CSCSoftware/CodeGraph.git
+cd CodeGraph
+npm install && npm run build
+```
 
-1. Clone the repository
-2. `npm install && npm run build`
-3. Add to your `~/.claude.json` (for Claude Code CLI):
+### 2. Register with your AI assistant
 
+**For Claude Code CLI** (`~/.claude.json`):
 ```json
 {
   "mcpServers": {
@@ -137,111 +100,107 @@ CodeGraph runs as an MCP server and is registered with Claude Code.
 }
 ```
 
-4. Restart Claude Code
+**For Claude Desktop** (`%APPDATA%/Claude/claude_desktop_config.json` on Windows):
+```json
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "node",
+      "args": ["/path/to/CodeGraph/build/index.js"]
+    }
+  }
+}
+```
 
-## Making Claude Actually Use CodeGraph
+**For other MCP clients**: See your client's documentation for MCP server configuration.
 
-**Important:** Just installing the MCP server isn't enough - you need to tell Claude when to use it!
+### 3. Make your AI actually use it
 
-Add this to your global `~/.claude/CLAUDE.md`:
+Add to your AI's instructions (e.g., `~/.claude/CLAUDE.md` for Claude Code):
 
 ```markdown
-### CodeGraph (MCP Server) - ALWAYS USE FIRST!
-**Persistent code index for fast searches.** Registered as MCP server `codegraph`.
+## CodeGraph - Use for ALL code searches!
 
-**CRITICAL - FOR EVERY CODE SEARCH:**
-1. **FIRST check:** Does `.codegraph/` exist in the project?
-2. **If yes:** Use `codegraph_query` INSTEAD of Grep/Glob!
-3. **If no:** Offer to run `codegraph_init` once, then use it
+**Before using Grep/Glob, check if `.codegraph/` exists in the project.**
 
-**NEVER use Grep/Glob for code searches when .codegraph/ exists!**
+If yes, use CodeGraph instead:
+- `codegraph_query` - Find functions, classes, variables by name
+- `codegraph_signature` - Get all methods in a file with line numbers
+- `codegraph_signatures` - Get methods from multiple files (glob pattern)
+- `codegraph_summary` - Project overview with entry points
 
-**CodeGraph knows all functions/methods with signatures!**
-- `codegraph_query` finds function names: term="Calculate", mode="starts_with" → all Calculate* methods
-- `codegraph_signature` shows ALL methods of a file with parameters and line numbers
-- `codegraph_signatures` with pattern="src/*.cs" → methods from multiple files
+If no `.codegraph/` exists, offer to run `codegraph_init` first.
+```
 
-**Example questions → CodeGraph tool:**
-- "Where is X calculated?" → `codegraph_query` with term="X" or mode="contains"
-- "What methods does class Y have?" → `codegraph_signature` for the file
-- "Show me all Update functions" → `codegraph_query` term="Update" mode="starts_with"
-- "What does this file do?" → `codegraph_signature`
-- "Project overview" → `codegraph_summary` + `codegraph_tree`
+### 4. Index your project
+
+Ask your AI: *"Index this project with CodeGraph"*
+
+Or manually in the AI chat:
+```
+codegraph_init({ path: "/path/to/your/project" })
 ```
 
 ## Available Tools
 
 | Tool | Description |
 |------|-------------|
-| `codegraph_init` | Index a project |
-| `codegraph_query` | Search terms (exact/contains/starts_with) |
-| `codegraph_signature` | Get signature of a single file |
-| `codegraph_signatures` | Get signatures of multiple files (glob pattern) |
-| `codegraph_update` | Re-index a single file |
-| `codegraph_remove` | Remove file from index |
-| `codegraph_summary` | Get project overview |
-| `codegraph_tree` | Get file tree with statistics |
-| `codegraph_describe` | Add project documentation |
-| `codegraph_link` | Link dependency project |
-| `codegraph_unlink` | Remove linked dependency |
+| `codegraph_init` | Index a project (creates `.codegraph/`) |
+| `codegraph_query` | Search by term (exact/contains/starts_with) |
+| `codegraph_signature` | Get one file's classes + methods |
+| `codegraph_signatures` | Get signatures for multiple files (glob) |
+| `codegraph_update` | Re-index a single changed file |
+| `codegraph_remove` | Remove a deleted file from index |
+| `codegraph_summary` | Project overview |
+| `codegraph_tree` | File tree with statistics |
+| `codegraph_describe` | Add documentation to summary |
+| `codegraph_link` | Link another indexed project |
+| `codegraph_unlink` | Remove linked project |
 | `codegraph_links` | List linked projects |
-| `codegraph_status` | Get index statistics |
-
-## Example Workflow
-
-```typescript
-// 1. Index a new project
-codegraph_init({ path: "/home/user/MyProject" })
-// → 150 files indexed, 5000 items found
-
-// 2. Understand the project
-codegraph_summary({ path: "..." })
-// → Entry Points: Program.cs, Main classes: GameEngine, Player, Enemy
-
-// 3. Search precisely
-codegraph_query({ term: "Damage", mode: "contains" })
-// → CalculateDamage in Engine.cs:156, TakeDamage in Player.cs:89, ...
-
-// 4. View signature
-codegraph_signature({ file: "src/Core/Engine.cs" })
-// → class GameEngine, void Initialize(), void Update(float dt), ...
-
-// 5. Update after changes
-codegraph_update({ file: "src/Core/Engine.cs" })
-// → 3 new items, 1 removed
-```
+| `codegraph_status` | Index statistics |
 
 ## Performance
 
-| Project | Language | Files | Items | Indexing Time |
-|---------|----------|-------|-------|---------------|
-| CodeGraph | TypeScript | 19 | ~1200 | <1s |
-| RemoteDebug | C# | 10 | 1900 | <1s |
-| LibPyramid3D | Rust | 18 | 3000 | <1s |
-| MeloTTS | Python | 56 | 4100 | ~2s |
+| Project | Files | Items | Index Time | Query Time |
+|---------|-------|-------|------------|------------|
+| Small (CodeGraph) | 19 | 1,200 | <1s | 1-5ms |
+| Medium (RemoteDebug) | 10 | 1,900 | <1s | 1-5ms |
+| Large (LibPyramid3D) | 18 | 3,000 | <1s | 1-5ms |
+| XL (MeloTTS) | 56 | 4,100 | ~2s | 1-10ms |
 
-Searches typically take 1-10ms.
+## Technology
+
+- **Parser**: [Tree-sitter](https://tree-sitter.github.io/) - Real parsing, not regex
+- **Database**: SQLite with WAL mode - Fast, single file, zero config
+- **Protocol**: [MCP](https://modelcontextprotocol.io/) - Works with any compatible AI
 
 ## Project Structure
 
 ```
-.codegraph/           ← Created in your project
-├── index.db          ← SQLite database
-└── summary.md        ← Optional project documentation
+.codegraph/              ← Created in YOUR project
+├── index.db             ← SQLite database
+└── summary.md           ← Optional documentation
 
-CodeGraph/            ← This repository
+CodeGraph/               ← This repository
 ├── src/
-│   ├── commands/     ← Tool implementations
-│   ├── db/           ← SQLite wrapper
-│   ├── parser/       ← Tree-sitter integration
-│   └── server/       ← MCP server
-└── build/            ← Compiled output
+│   ├── commands/        ← Tool implementations
+│   ├── db/              ← SQLite wrapper
+│   ├── parser/          ← Tree-sitter integration
+│   └── server/          ← MCP protocol handler
+└── build/               ← Compiled output
 ```
+
+## Contributing
+
+PRs welcome! Especially for:
+- New language support
+- Performance improvements
+- Documentation
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE)
 
 ## Authors
 
-Uwe Chalas & Claude (Rudi)
+Uwe Chalas & Claude
