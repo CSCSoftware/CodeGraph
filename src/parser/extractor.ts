@@ -1,0 +1,335 @@
+/**
+ * Code extractor - extracts items, lines, and metadata from source files
+ */
+
+import type Parser from 'tree-sitter';
+import { detectLanguage, parseFile, type SupportedLanguage } from './tree-sitter.js';
+import { getLanguageConfig } from './languages/index.js';
+import type { LineRow } from '../db/queries.js';
+
+// ============================================================
+// Types
+// ============================================================
+
+export interface ExtractedItem {
+    term: string;
+    lineNumber: number;
+    lineType: LineRow['line_type'];
+}
+
+export interface ExtractedLine {
+    lineNumber: number;
+    lineType: LineRow['line_type'];
+}
+
+export interface ExtractedMethod {
+    name: string;
+    prototype: string;
+    lineNumber: number;
+    visibility: string | null;
+    isStatic: boolean;
+    isAsync: boolean;
+}
+
+export interface ExtractedType {
+    name: string;
+    kind: 'class' | 'struct' | 'interface' | 'enum' | 'type';
+    lineNumber: number;
+}
+
+export interface ExtractionResult {
+    language: SupportedLanguage;
+    items: ExtractedItem[];
+    lines: ExtractedLine[];
+    methods: ExtractedMethod[];
+    types: ExtractedType[];
+    headerComments: string[];
+}
+
+// ============================================================
+// Main extraction function
+// ============================================================
+
+/**
+ * Extract all indexable information from source code
+ */
+export function extract(sourceCode: string, filePath: string): ExtractionResult | null {
+    const detectedLanguage = detectLanguage(filePath);
+    if (!detectedLanguage) {
+        return null;
+    }
+    const language: SupportedLanguage = detectedLanguage;
+
+    const tree = parseFile(sourceCode, filePath);
+    if (!tree) {
+        return null;
+    }
+
+    const config = getLanguageConfig(language);
+    const sourceLines = sourceCode.split('\n');
+
+    const items: ExtractedItem[] = [];
+    const linesMap = new Map<number, LineRow['line_type']>();
+    const methods: ExtractedMethod[] = [];
+    const types: ExtractedType[] = [];
+    const headerComments: string[] = [];
+
+    // Track if we've seen non-comment code (for header comments)
+    let seenCode = false;
+
+    /**
+     * Recursively visit all nodes in the tree
+     */
+    function visit(node: Parser.SyntaxNode): void {
+        const lineNumber = node.startPosition.row + 1; // 1-based
+
+        // Check for comments
+        if (config.commentNodes.has(node.type)) {
+            if (!seenCode) {
+                // This is a header comment
+                headerComments.push(extractCommentText(node.text));
+            }
+            setLineType(lineNumber, 'comment');
+            extractIdentifiersFromComment(node.text, lineNumber, items, config.isKeyword);
+            return; // Don't recurse into comments
+        }
+
+        // Check for type declarations (class, struct, interface, etc.)
+        if (config.typeNodes.has(node.type)) {
+            seenCode = true;
+            const typeInfo = extractTypeInfo(node, language);
+            if (typeInfo) {
+                types.push(typeInfo);
+                setLineType(lineNumber, 'struct');
+            }
+        }
+
+        // Check for method declarations
+        if (config.methodNodes.has(node.type)) {
+            seenCode = true;
+            const methodInfo = extractMethodInfo(node, language, sourceLines);
+            if (methodInfo) {
+                methods.push(methodInfo);
+                setLineType(lineNumber, 'method');
+            }
+        }
+
+        // Check for property declarations
+        if (config.propertyNodes?.has(node.type)) {
+            seenCode = true;
+            setLineType(lineNumber, 'property');
+        }
+
+        // Check for identifiers
+        if (config.identifierNodes.has(node.type)) {
+            seenCode = true;
+            const term = node.text;
+
+            // Filter out keywords and very short terms
+            if (term.length >= 2 && !config.isKeyword(term)) {
+                items.push({
+                    term,
+                    lineNumber,
+                    lineType: linesMap.get(lineNumber) ?? 'code',
+                });
+                setLineType(lineNumber, linesMap.get(lineNumber) ?? 'code');
+            }
+        }
+
+        // Recurse into children
+        for (const child of node.children) {
+            visit(child);
+        }
+    }
+
+    /**
+     * Set line type (doesn't overwrite more specific types)
+     */
+    function setLineType(lineNumber: number, type: LineRow['line_type']): void {
+        const existing = linesMap.get(lineNumber);
+        if (!existing || shouldUpgrade(existing, type)) {
+            linesMap.set(lineNumber, type);
+        }
+    }
+
+    // Start traversal
+    visit(tree.rootNode);
+
+    // Convert lines map to array
+    const lines: ExtractedLine[] = Array.from(linesMap.entries())
+        .map(([lineNumber, lineType]) => ({ lineNumber, lineType }))
+        .sort((a, b) => a.lineNumber - b.lineNumber);
+
+    // Update item line types from final linesMap
+    for (const item of items) {
+        item.lineType = linesMap.get(item.lineNumber) ?? 'code';
+    }
+
+    return {
+        language,
+        items,
+        lines,
+        methods,
+        types,
+        headerComments,
+    };
+}
+
+// ============================================================
+// Helper functions
+// ============================================================
+
+/**
+ * Priority order for line types (higher = more specific)
+ */
+const LINE_TYPE_PRIORITY: Record<LineRow['line_type'], number> = {
+    code: 0,
+    string: 1,
+    comment: 2,
+    property: 3,
+    method: 4,
+    struct: 5,
+};
+
+/**
+ * Check if we should upgrade from one type to another
+ */
+function shouldUpgrade(existing: LineRow['line_type'], newType: LineRow['line_type']): boolean {
+    return LINE_TYPE_PRIORITY[newType] > LINE_TYPE_PRIORITY[existing];
+}
+
+/**
+ * Extract plain text from a comment (remove comment markers)
+ */
+function extractCommentText(commentText: string): string {
+    return commentText
+        .replace(/^\/\/\s*/gm, '')          // Remove //
+        .replace(/^\/\*+\s*/g, '')           // Remove /*
+        .replace(/\s*\*+\/$/g, '')           // Remove */
+        .replace(/^\s*\*\s?/gm, '')          // Remove * at start of lines
+        .replace(/^#+\s*/gm, '')             // Remove # (Python)
+        .trim();
+}
+
+/**
+ * Extract identifiers from comment text
+ */
+function extractIdentifiersFromComment(
+    commentText: string,
+    lineNumber: number,
+    items: ExtractedItem[],
+    isKeyword: (term: string) => boolean
+): void {
+    // Extract words that look like identifiers (CamelCase, snake_case, etc.)
+    const identifierPattern = /\b[A-Za-z_][A-Za-z0-9_]*\b/g;
+    const matches = commentText.match(identifierPattern) ?? [];
+
+    for (const term of matches) {
+        if (term.length >= 3 && !isKeyword(term)) {
+            items.push({
+                term,
+                lineNumber,
+                lineType: 'comment',
+            });
+        }
+    }
+}
+
+/**
+ * Extract type information from a type declaration node
+ */
+function extractTypeInfo(node: Parser.SyntaxNode, language: SupportedLanguage): ExtractedType | null {
+    // Find the name child
+    const nameNode = node.children.find(c =>
+        c.type === 'identifier' || c.type === 'type_identifier' || c.type === 'name'
+    );
+
+    if (!nameNode) {
+        return null;
+    }
+
+    // Determine kind from node type
+    let kind: ExtractedType['kind'] = 'class';
+    const nodeType = node.type.toLowerCase();
+
+    if (nodeType.includes('struct')) kind = 'struct';
+    else if (nodeType.includes('interface')) kind = 'interface';
+    else if (nodeType.includes('enum')) kind = 'enum';
+    else if (nodeType.includes('type_alias')) kind = 'type';
+
+    return {
+        name: nameNode.text,
+        kind,
+        lineNumber: node.startPosition.row + 1,
+    };
+}
+
+/**
+ * Extract method information from a method declaration node
+ */
+function extractMethodInfo(
+    node: Parser.SyntaxNode,
+    language: SupportedLanguage,
+    sourceLines: string[]
+): ExtractedMethod | null {
+    // Find method name
+    let name: string | null = null;
+    let visibility: string | null = null;
+    let isStatic = false;
+    let isAsync = false;
+
+    for (const child of node.children) {
+        if (child.type === 'identifier' || child.type === 'property_identifier' || child.type === 'name') {
+            if (!name) name = child.text;
+        }
+
+        // Check modifiers
+        const text = child.text.toLowerCase();
+        if (text === 'public' || text === 'private' || text === 'protected' || text === 'internal') {
+            visibility = text;
+        }
+        if (text === 'static') isStatic = true;
+        if (text === 'async') isAsync = true;
+    }
+
+    if (!name) {
+        return null;
+    }
+
+    // Extract prototype (first line of method, cleaned up)
+    const startLine = node.startPosition.row;
+    const endLine = Math.min(startLine + 2, sourceLines.length - 1); // Max 3 lines for prototype
+
+    let prototype = '';
+    for (let i = startLine; i <= endLine; i++) {
+        const line = sourceLines[i]?.trim() ?? '';
+        prototype += (prototype ? ' ' : '') + line;
+
+        // Stop at opening brace or arrow
+        if (line.includes('{') || line.includes('=>')) {
+            prototype = prototype.replace(/\s*\{.*$/, '').replace(/\s*=>.*$/, '').trim();
+            break;
+        }
+    }
+
+    // Clean up prototype
+    prototype = prototype
+        .replace(/\s+/g, ' ')
+        .replace(/\s*,\s*/g, ', ')
+        .trim();
+
+    return {
+        name,
+        prototype,
+        lineNumber: node.startPosition.row + 1,
+        visibility,
+        isStatic,
+        isAsync,
+    };
+}
+
+// ============================================================
+// Exports
+// ============================================================
+
+export { detectLanguage, isSupported, getSupportedExtensions } from './tree-sitter.js';
