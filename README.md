@@ -84,6 +84,7 @@ The index lives in `.codegraph/index.db` (SQLite) - fast, portable, no external 
 - **Cross-Project Links**: Query across multiple related projects
 - **Time-based Filtering**: Find what changed in the last hour, day, or week
 - **Project Structure**: Query all files (code, config, docs, assets) without filesystem access
+- **Session Notes**: Leave reminders for the next session - persists in the database
 
 ## Supported Languages
 
@@ -187,6 +188,8 @@ codegraph_init({ path: "/path/to/your/project" })
 | `codegraph_status` | Index statistics |
 | `codegraph_scan` | Find indexed projects in directory tree |
 | `codegraph_files` | List project files by type (code/config/doc/asset) |
+| `codegraph_note` | Read/write session notes (persists between sessions) |
+| `codegraph_session` | Start session, detect external changes, auto-reindex |
 
 ## Time-based Filtering
 
@@ -215,6 +218,24 @@ codegraph_files({ path: ".", pattern: "**/*.md" })  # All markdown files
 ```
 
 File types: `code`, `config`, `doc`, `asset`, `test`, `other`, `dir`
+
+## Session Notes
+
+Leave reminders for the next session - no more losing context between chats:
+
+```
+codegraph_note({ path: ".", note: "Test the glob fix after restart" })  # Write
+codegraph_note({ path: ".", note: "Also check edge cases", append: true })  # Append
+codegraph_note({ path: "." })                                              # Read
+codegraph_note({ path: ".", clear: true })                                 # Clear
+```
+
+**Use cases:**
+- Before ending a session: *"Remember to test X next time"*
+- AI auto-reminder: Save what to verify after a restart
+- Handover notes: Context for the next session without editing config files
+
+Notes are stored in the SQLite database (`.codegraph/index.db`) and persist indefinitely.
 
 ## CLI Usage
 

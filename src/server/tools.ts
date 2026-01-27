@@ -5,7 +5,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, type QueryMode } from '../commands/index.js';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, type QueryMode } from '../commands/index.js';
 import { openDatabase } from '../db/index.js';
 
 /**
@@ -333,6 +333,46 @@ export function registerTools(): Tool[] {
                 required: ['path'],
             },
         },
+        {
+            name: 'codegraph_note',
+            description: 'Read or write a session note for the project. Use this to leave reminders for the next session (e.g., "Test the glob fix", "Refactor X"). Notes persist in the CodeGraph database and are shown when querying the project.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    note: {
+                        type: 'string',
+                        description: 'Note to save. If omitted, reads the current note.',
+                    },
+                    append: {
+                        type: 'boolean',
+                        description: 'If true, appends to existing note instead of replacing (default: false)',
+                    },
+                    clear: {
+                        type: 'boolean',
+                        description: 'If true, clears the note (default: false)',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+        {
+            name: 'codegraph_session',
+            description: 'Start or check a CodeGraph session. Call this at the beginning of a new chat session to: (1) detect files changed externally since last session, (2) auto-reindex modified files, (3) get session note and last session times. Returns info for "What did we do last session?" queries.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                },
+                required: ['path'],
+            },
+        },
     ];
 }
 
@@ -389,6 +429,12 @@ export async function handleToolCall(
 
             case 'codegraph_files':
                 return handleFiles(args);
+
+            case 'codegraph_note':
+                return handleNote(args);
+
+            case 'codegraph_session':
+                return handleSession(args);
 
             default:
                 return {
@@ -1155,6 +1201,125 @@ function handleFiles(args: Record<string, unknown>): { content: Array<{ type: st
             message += `  ${icon} ${fileName} (${file.type})${indexed}\n`;
             entriesShown++;
         }
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle codegraph_note
+ */
+function handleNote(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = note({
+        path,
+        note: args.note as string | undefined,
+        append: args.append as boolean | undefined,
+        clear: args.clear as boolean | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    switch (result.action) {
+        case 'clear':
+            return {
+                content: [{ type: 'text', text: '✓ Session note cleared.' }],
+            };
+
+        case 'write':
+            return {
+                content: [{ type: 'text', text: `✓ Session note saved:\n\n${result.note}` }],
+            };
+
+        case 'append':
+            return {
+                content: [{ type: 'text', text: `✓ Appended to session note:\n\n${result.note}` }],
+            };
+
+        case 'read':
+        default:
+            if (!result.note) {
+                return {
+                    content: [{ type: 'text', text: 'No session note set for this project.' }],
+                };
+            }
+            return {
+                content: [{ type: 'text', text: `📝 Session Note:\n\n${result.note}` }],
+            };
+    }
+}
+
+/**
+ * Handle codegraph_session
+ */
+function handleSession(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = session({ path });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    let message = '';
+
+    // Session status
+    if (result.isNewSession) {
+        message += '🆕 **New Session Started**\n\n';
+    } else {
+        message += '▶️ **Session Continued**\n\n';
+    }
+
+    // Last session info
+    if (result.sessionInfo.lastSessionStart && result.sessionInfo.lastSessionEnd) {
+        message += '## Last Session\n';
+        message += `- **Start:** ${formatSessionTime(result.sessionInfo.lastSessionStart)}\n`;
+        message += `- **End:** ${formatSessionTime(result.sessionInfo.lastSessionEnd)}\n`;
+        message += `- **Duration:** ${formatDuration(result.sessionInfo.lastSessionStart, result.sessionInfo.lastSessionEnd)}\n`;
+        message += `\n💡 Query last session changes with:\n\`codegraph_query({ term: "...", modified_since: "${result.sessionInfo.lastSessionStart}", modified_before: "${result.sessionInfo.lastSessionEnd}" })\`\n\n`;
+    }
+
+    // External changes
+    if (result.externalChanges.length > 0) {
+        message += '## External Changes Detected\n';
+        message += `Found ${result.externalChanges.length} file(s) changed outside of session:\n\n`;
+
+        for (const change of result.externalChanges) {
+            const icon = change.reason === 'deleted' ? '🗑️' : '✏️';
+            message += `- ${icon} ${change.path} (${change.reason})\n`;
+        }
+
+        if (result.reindexed.length > 0) {
+            message += `\n✅ Auto-reindexed ${result.reindexed.length} file(s)\n`;
+        }
+        message += '\n';
+    }
+
+    // Session note
+    if (result.note) {
+        message += '## 📝 Session Note\n';
+        message += result.note + '\n';
     }
 
     return {
