@@ -37,17 +37,33 @@ export interface InitResult {
 // ============================================================
 
 const DEFAULT_EXCLUDE = [
+    // Package managers
     '**/node_modules/**',
+    '**/packages/**',
+    '**/vendor/**',          // PHP Composer, Go
+    // Build output
     '**/bin/**',
     '**/obj/**',
     '**/build/**',
     '**/dist/**',
+    '**/out/**',             // VS Code, some TS configs
+    '**/target/**',          // Rust, Maven
+    '**/Debug/**',           // Visual Studio
+    '**/Release/**',         // Visual Studio
+    '**/x64/**',             // Visual Studio
+    '**/x86/**',             // Visual Studio
+    '**/__pycache__/**',     // Python
+    '**/.pyc',               // Python bytecode
+    // IDE/Editor
     '**/.git/**',
     '**/.vs/**',
     '**/.idea/**',
-    '**/packages/**',
+    '**/.vscode/**',
+    // Generated files
     '**/*.min.js',
     '**/*.generated.*',
+    '**/*.g.cs',             // C# source generators
+    '**/*.Designer.cs',      // WinForms designer
 ];
 
 // ============================================================

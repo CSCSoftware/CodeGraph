@@ -190,6 +190,7 @@ codegraph_init({ path: "/path/to/your/project" })
 | `codegraph_files` | List project files by type (code/config/doc/asset) |
 | `codegraph_note` | Read/write session notes (persists between sessions) |
 | `codegraph_session` | Start session, detect external changes, auto-reindex |
+| `codegraph_viewer` | Open interactive project tree in browser |
 
 ## Time-based Filtering
 
@@ -215,9 +216,12 @@ CodeGraph indexes ALL files in your project (not just code), letting you query t
 codegraph_files({ path: ".", type: "config" })  # All config files
 codegraph_files({ path: ".", type: "test" })    # All test files
 codegraph_files({ path: ".", pattern: "**/*.md" })  # All markdown files
+codegraph_files({ path: ".", modified_since: "30m" })  # Changed this session
 ```
 
 File types: `code`, `config`, `doc`, `asset`, `test`, `other`, `dir`
+
+Use `modified_since` to find files changed in this session - perfect for *"What did I edit?"*
 
 ## Session Notes
 
@@ -236,6 +240,21 @@ codegraph_note({ path: ".", clear: true })                                 # Cle
 - Handover notes: Context for the next session without editing config files
 
 Notes are stored in the SQLite database (`.codegraph/index.db`) and persist indefinitely.
+
+## Interactive Viewer
+
+Explore your indexed project visually in the browser:
+
+```
+codegraph_viewer({ path: "." })
+```
+
+Opens `http://localhost:3333` with:
+- **Interactive file tree** - Click to expand directories
+- **File signatures** - Click any file to see its types and methods
+- **Live reload** - Changes detected automatically while you code
+
+Close with `codegraph_viewer({ path: ".", action: "close" })`
 
 ## CLI Usage
 

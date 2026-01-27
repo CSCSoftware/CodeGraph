@@ -53,9 +53,10 @@ Registered in `~/.claude/settings.json`:
 | `codegraph_unlink` | Remove linked dependency |
 | `codegraph_links` | List all linked dependencies |
 | `codegraph_scan` | Find all .codegraph directories in a path |
-| `codegraph_files` | List project files by type (code/config/doc/asset/test) |
+| `codegraph_files` | List project files by type, supports `modified_since` for recent changes |
 | `codegraph_note` | Read/write session notes (persists between sessions) |
 | `codegraph_session` | Start session, detect external changes, auto-reindex |
+| `codegraph_viewer` | Open interactive project tree viewer in browser |
 
 ## CLI Commands
 
@@ -111,7 +112,8 @@ src/
     ├── scan.ts           # codegraph_scan
     ├── files.ts          # codegraph_files
     ├── note.ts           # codegraph_note
-    └── session.ts        # codegraph_session
+    ├── session.ts        # codegraph_session
+    └── viewer/           # codegraph_viewer (browser UI)
 ```
 
 ## Database Schema
@@ -195,6 +197,16 @@ codegraph_files({ path: ".", pattern: "**/*.md" })  # Glob filter
 ```
 File types: `code`, `config`, `doc`, `asset`, `test`, `other`, `dir`
 
+### Recently Changed Files (v1.3.0)
+Find files modified in this session using `modified_since`:
+```
+codegraph_files({ path: ".", modified_since: "30m" })  # Last 30 minutes
+codegraph_files({ path: ".", modified_since: "2h" })   # Last 2 hours
+codegraph_files({ path: ".", modified_since: "1d" })   # Last day
+```
+This filters by `files.last_indexed` - shows files that were reindexed after the given time.
+Perfect for answering "What files did I change in this session?"
+
 ### Session Notes (v1.2.0)
 Leave notes for the next session - persists in the CodeGraph database:
 ```
@@ -232,6 +244,19 @@ codegraph_query({
 ```
 
 **Recommended:** Call `codegraph_session` at the start of every new chat session!
+
+### Interactive Viewer (v1.3.0)
+Open a browser-based project explorer with live updates:
+```
+codegraph_viewer({ path: "." })              # Open viewer
+codegraph_viewer({ path: ".", action: "close" })  # Close viewer
+```
+
+**Features:**
+- Interactive file tree (click to expand)
+- Click files to see signatures (types, methods)
+- **Live reload** - File changes detected automatically (chokidar)
+- Runs on `http://localhost:3333`
 
 ---
 

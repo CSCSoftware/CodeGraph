@@ -7,6 +7,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, type QueryMode } from '../commands/index.js';
 import { openDatabase } from '../db/index.js';
+import { startViewer, stopViewer } from '../viewer/index.js';
 
 /**
  * Register all available tools
@@ -312,7 +313,7 @@ export function registerTools(): Tool[] {
         },
         {
             name: 'codegraph_files',
-            description: 'List all files and directories in the indexed project. Returns the complete project structure with file types (code, config, doc, asset, test, other) and whether each file is indexed for code search.',
+            description: 'List all files and directories in the indexed project. Returns the complete project structure with file types (code, config, doc, asset, test, other) and whether each file is indexed for code search. Use modified_since to find files changed in this session.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -328,6 +329,10 @@ export function registerTools(): Tool[] {
                     pattern: {
                         type: 'string',
                         description: 'Glob pattern to filter files (e.g., "src/**/*.ts")',
+                    },
+                    modified_since: {
+                        type: 'string',
+                        description: 'Only files indexed after this time. Supports: "2h", "30m", "1d", "1w", or ISO date. Use to find files changed this session.',
                     },
                 },
                 required: ['path'],
@@ -368,6 +373,25 @@ export function registerTools(): Tool[] {
                     path: {
                         type: 'string',
                         description: 'Path to project with .codegraph directory',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+        {
+            name: 'codegraph_viewer',
+            description: 'Open an interactive project tree viewer in the browser. Shows the indexed file structure with clickable nodes - click on a file to see its signature (header comments, types, methods). Uses a local HTTP server with WebSocket for live updates.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    action: {
+                        type: 'string',
+                        enum: ['open', 'close'],
+                        description: 'Action to perform: open (default) or close the viewer',
                     },
                 },
                 required: ['path'],
@@ -435,6 +459,9 @@ export async function handleToolCall(
 
             case 'codegraph_session':
                 return handleSession(args);
+
+            case 'codegraph_viewer':
+                return handleViewer(args);
 
             default:
                 return {
@@ -1140,6 +1167,7 @@ function handleFiles(args: Record<string, unknown>): { content: Array<{ type: st
         path,
         type: args.type as string | undefined,
         pattern: args.pattern as string | undefined,
+        modifiedSince: args.modified_since as string | undefined,
     });
 
     if (!result.success) {
@@ -1325,4 +1353,44 @@ function handleSession(args: Record<string, unknown>): { content: Array<{ type: 
     return {
         content: [{ type: 'text', text: message.trimEnd() }],
     };
+}
+
+/**
+ * Handle codegraph_viewer
+ */
+async function handleViewer(args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const path = args.path as string;
+    const action = (args.action as string) || 'open';
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    // Check if .codegraph exists
+    const codegraphPath = join(path, '.codegraph');
+    if (!existsSync(codegraphPath)) {
+        return {
+            content: [{ type: 'text', text: `Error: No .codegraph directory found at ${path}. Run codegraph_init first.` }],
+        };
+    }
+
+    if (action === 'close') {
+        const message = stopViewer();
+        return {
+            content: [{ type: 'text', text: message }],
+        };
+    }
+
+    try {
+        const message = await startViewer(path);
+        return {
+            content: [{ type: 'text', text: `🖥️ ${message}` }],
+        };
+    } catch (error) {
+        return {
+            content: [{ type: 'text', text: `Error starting viewer: ${error instanceof Error ? error.message : String(error)}` }],
+        };
+    }
 }

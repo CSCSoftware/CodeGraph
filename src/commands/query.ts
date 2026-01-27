@@ -182,7 +182,7 @@ export function query(params: QueryParams): QueryResult {
  * Parse time offset string to Unix timestamp
  * Supports: "2h" (hours), "30m" (minutes), "1d" (days), "1w" (weeks), or ISO date string
  */
-function parseTimeOffset(input: string): number | null {
+export function parseTimeOffset(input: string): number | null {
     if (!input) return null;
 
     // Try relative time format: 2h, 30m, 1d, 1w

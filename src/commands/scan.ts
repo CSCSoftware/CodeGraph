@@ -1,5 +1,5 @@
 /**
- * codegraph_scan command - Find all .codegraph directories
+ * codegraph_scan command - Find all .codegraph directories!
  */
 
 import { existsSync, readdirSync, statSync } from 'fs';
