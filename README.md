@@ -1,5 +1,9 @@
 # CodeGraph
 
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](https://nodejs.org/)
+[![MCP Server](https://img.shields.io/badge/MCP-Server-blue.svg)](https://modelcontextprotocol.io/)
+
 **Stop wasting 80% of your AI's context window on code searches.**
 
 CodeGraph is an MCP server that gives AI coding assistants instant access to your entire codebase through a persistent, pre-built index. Works with any MCP-compatible AI assistant: Claude Code, Cursor, Windsurf, Continue.dev, and more.
@@ -32,6 +36,20 @@ AI: codegraph_query({ term: "PlayerHealth" })
 ```
 
 **Result: 50-80% less context used for code navigation.**
+
+## Why Not Just Grep?
+
+| | Grep/Ripgrep | CodeGraph |
+|---|---|---|
+| **Context usage** | 2000+ tokens per search | ~50 tokens |
+| **Results** | All text matches | Only identifiers |
+| **Precision** | `log` matches `catalog`, `logarithm` | `log` finds only `log` |
+| **Persistence** | Starts fresh every time | Index survives sessions |
+| **Structure** | Flat text search | Knows methods, classes, types |
+
+**The real cost of grep**: Every grep result includes surrounding context. Search for `User` in a large project and you'll get hundreds of hits - comments, strings, partial matches. Your AI reads through all of them, burning context tokens on noise.
+
+**CodeGraph indexes identifiers**: It uses Tree-sitter to actually parse your code. When you search for `User`, you get the class definition, the method parameters, the variable declarations - not every comment that mentions "user".
 
 ## How It Works
 
