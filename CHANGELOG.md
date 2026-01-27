@@ -2,6 +2,23 @@
 
 All notable changes to CodeGraph will be documented in this file.
 
+## [1.2.0] - 2026-01-27
+
+### Added
+- **Session Notes**: New `codegraph_note` tool to persist reminders between sessions
+  - Write, append, read, and clear notes
+  - Stored in SQLite database (survives restarts)
+  - Use cases: handover notes, test reminders, context for next session
+- **Session Tracking**: New `codegraph_session` tool for automatic session management
+  - Detects new sessions (>5 min since last activity)
+  - Records session start/end times
+  - Detects files modified externally (outside sessions)
+  - Auto-reindexes changed files on session start
+  - Returns session note if one exists
+
+### Changed
+- Database schema: Added `metadata` table for key-value storage (session times, notes)
+
 ## [1.1.0] - 2026-01-27
 
 ### Added

@@ -65,6 +65,13 @@ export class CodeGraphDatabase {
     }
 
     /**
+     * Delete metadata entry
+     */
+    deleteMetadata(key: string): void {
+        this.db.prepare('DELETE FROM metadata WHERE key = ?').run(key);
+    }
+
+    /**
      * Run a function in a transaction
      */
     transaction<T>(fn: () => T): T {

@@ -124,12 +124,14 @@ function globToRegex(pattern: string): RegExp {
     // Escape special regex chars except * and ?
     regex = regex.replace(/[.+^${}()|[\]]/g, '\\$&');
 
-    // Convert glob to regex
+    // Convert glob to regex - use placeholders to avoid double-replacement
     regex = regex
-        .replace(/\*\*\//g, '(.*/)?')   // **/ matches zero or more dirs
-        .replace(/\*\*/g, '.*')          // ** matches anything
-        .replace(/\*/g, '[^/]*')         // * matches anything except /
-        .replace(/\?/g, '.');            // ? matches single char
+        .replace(/\*\*\//g, '\x00STARSTARSLASH\x00')  // Placeholder for **/
+        .replace(/\*\*/g, '\x00STARSTAR\x00')          // Placeholder for **
+        .replace(/\*/g, '[^/]*')                        // * matches anything except /
+        .replace(/\?/g, '.')                            // ? matches single char
+        .replace(/\x00STARSTARSLASH\x00/g, '(.*/)?')   // **/ matches zero or more dirs
+        .replace(/\x00STARSTAR\x00/g, '.*');           // ** matches anything
 
     return new RegExp('^' + regex + '$', 'i');
 }

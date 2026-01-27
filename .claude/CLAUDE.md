@@ -54,6 +54,8 @@ Registered in `~/.claude/settings.json`:
 | `codegraph_links` | List all linked dependencies |
 | `codegraph_scan` | Find all .codegraph directories in a path |
 | `codegraph_files` | List project files by type (code/config/doc/asset/test) |
+| `codegraph_note` | Read/write session notes (persists between sessions) |
+| `codegraph_session` | Start session, detect external changes, auto-reindex |
 
 ## CLI Commands
 
@@ -107,7 +109,9 @@ src/
     ├── summary.ts        # codegraph_summary, codegraph_tree, codegraph_describe
     ├── link.ts           # codegraph_link, codegraph_unlink, codegraph_links
     ├── scan.ts           # codegraph_scan
-    └── files.ts          # codegraph_files
+    ├── files.ts          # codegraph_files
+    ├── note.ts           # codegraph_note
+    └── session.ts        # codegraph_session
 ```
 
 ## Database Schema
@@ -122,6 +126,7 @@ SQLite with WAL mode. Key tables:
 - `types` - Class/struct/interface definitions
 - `dependencies` - Links to other CodeGraph instances
 - `project_files` - All project files with type (code/config/doc/asset/test)
+- `metadata` - Key-value store (includes session_note)
 
 ## Key Implementation Details
 
@@ -139,6 +144,7 @@ SQLite with WAL mode. Key tables:
 
 | File | Purpose |
 |------|---------|
+| `MCP-API-REFERENCE.md` | Complete API reference for all tools |
 | `CODEGRAPH-SPEC.md` | Complete specification (~1500 lines) |
 | `IMPLEMENTATION-PLAN.md` | Phased implementation roadmap |
 
@@ -188,6 +194,44 @@ codegraph_files({ path: ".", type: "test" })    # All test files
 codegraph_files({ path: ".", pattern: "**/*.md" })  # Glob filter
 ```
 File types: `code`, `config`, `doc`, `asset`, `test`, `other`, `dir`
+
+### Session Notes (v1.2.0)
+Leave notes for the next session - persists in the CodeGraph database:
+```
+codegraph_note({ path: ".", note: "Test glob fix after restart" })  # Write
+codegraph_note({ path: ".", note: "Also check X", append: true })   # Append
+codegraph_note({ path: "." })                                        # Read
+codegraph_note({ path: ".", clear: true })                           # Clear
+```
+
+**Use cases:**
+- **User request:** "Remember to refactor the auth module"
+- **Auto-reminder:** Before session ends, save what to test next time
+- **Handover notes:** Context for the next session without editing CLAUDE.md
+
+### Session Tracking (v1.2.0)
+Automatic session management with external change detection:
+```
+codegraph_session({ path: "." })
+```
+
+**What it does:**
+1. **Detects new session** - If >5 min since last activity
+2. **Records session times** - `last_session_start`, `last_session_end` in DB
+3. **Detects external changes** - Files modified outside of sessions (hash comparison)
+4. **Auto-reindexes** - Modified files are automatically updated
+5. **Returns session note** - If one exists
+
+**Query last session changes:**
+```
+codegraph_query({
+    term: "...",
+    modified_since: "{last_session_start}",  # Unix timestamp
+    modified_before: "{last_session_end}"
+})
+```
+
+**Recommended:** Call `codegraph_session` at the start of every new chat session!
 
 ---
 
