@@ -64,11 +64,14 @@ export async function startViewer(projectPath: string): Promise<string> {
     const projectRoot = path.resolve(projectPath);
     const absoluteProjectPath = path.resolve(projectPath); // For updateIndex
 
-    // Track files changed during this viewer session (via FileWatcher)
+    // Track files changed - initialize with DB session changes, then add live changes
+    const dbSessionChanges = detectSessionChanges(sqlite);
     const viewerSessionChanges: SessionChangeInfo = {
-        modified: new Set(),
-        new: new Set()
+        modified: new Set(dbSessionChanges.modified),
+        new: new Set(dbSessionChanges.new)
     };
+
+    console.error('[Viewer] Session changes from DB:', viewerSessionChanges.modified.size, 'modified,', viewerSessionChanges.new.size, 'new');
 
     const app = express();
     server = createServer(app);
@@ -279,12 +282,13 @@ function detectSessionChanges(db: Database.Database): SessionChangeInfo {
 
         const sessionStart = parseInt(sessionStartRow.value, 10);
 
-        // Find files indexed during this session (last_indexed >= session_start)
+        // Find files indexed AFTER session start (not AT session start)
+        // This ensures a fresh re-index doesn't mark everything as modified
         const recentlyIndexed = db.prepare(`
             SELECT path, last_indexed,
                    (SELECT COUNT(*) FROM lines l WHERE l.file_id = f.id) as line_count
             FROM files f
-            WHERE last_indexed >= ?
+            WHERE last_indexed > ?
         `).all(sessionStart) as Array<{ path: string; last_indexed: number; line_count: number }>;
 
         for (const file of recentlyIndexed) {
@@ -578,6 +582,19 @@ function getViewerHTML(projectPath: string): string {
             overflow: hidden;
         }
 
+        /* Splitter */
+        .splitter {
+            width: 6px;
+            background: var(--bg-tertiary);
+            cursor: col-resize;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .splitter:hover, .splitter.dragging {
+            background: var(--accent);
+        }
+
         /* Panel styles */
         .panel {
             display: flex;
@@ -824,7 +841,7 @@ function getViewerHTML(projectPath: string): string {
     </header>
 
     <div class="container">
-        <div class="panel tree-panel">
+        <div class="panel tree-panel" id="treePanel">
             <div class="tab-bar">
                 <div class="tab active" data-tab="code">Code</div>
                 <div class="tab" data-tab="all">All</div>
@@ -833,6 +850,7 @@ function getViewerHTML(projectPath: string): string {
                 <div class="loading">Loading project tree...</div>
             </div>
         </div>
+        <div class="splitter" id="splitter"></div>
         <div class="panel detail-panel">
             <div class="tab-bar">
                 <div class="tab active" data-tab="overview">Overview</div>
@@ -1100,6 +1118,36 @@ function getViewerHTML(projectPath: string): string {
             div.textContent = text;
             return div.innerHTML;
         }
+
+        // Splitter functionality
+        const splitter = document.getElementById('splitter');
+        const treePanel = document.getElementById('treePanel');
+        let isDragging = false;
+
+        splitter.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            splitter.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const containerRect = document.querySelector('.container').getBoundingClientRect();
+            const newWidth = e.clientX - containerRect.left;
+            if (newWidth >= 200 && newWidth <= 800) {
+                treePanel.style.width = newWidth + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                splitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
     </script>
 </body>
 </html>`;

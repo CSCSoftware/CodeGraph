@@ -2,7 +2,6 @@
  * CodeGraph - MCP Server Entry Point
  *
  * Provides persistent code indexing for Claude Code.
- * Test comment for live reload - delete me later
  *
  * Usage:
  *   node build/index.js              - Start MCP server (default)

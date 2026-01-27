@@ -142,15 +142,18 @@ export function openDatabase(dbPath: string, readonly = false): CodeGraphDatabas
 
 /**
  * Create and initialize a new CodeGraph database
- * If the database already exists, clears all data for a fresh re-index
+ * If incremental=true, keeps existing data for incremental updates
+ * If incremental=false (default), clears all data for fresh re-index
  */
-export function createDatabase(dbPath: string, projectName?: string, projectRoot?: string): CodeGraphDatabase {
+export function createDatabase(dbPath: string, projectName?: string, projectRoot?: string, incremental = false): CodeGraphDatabase {
     const db = new CodeGraphDatabase({ dbPath });
     db.initSchema();
 
-    // Clear all data for fresh re-index (ON DELETE CASCADE handles related tables)
-    db.getDb().exec('DELETE FROM files');
-    db.getDb().exec('DELETE FROM items');
+    if (!incremental) {
+        // Clear all data for fresh re-index (ON DELETE CASCADE handles related tables)
+        db.getDb().exec('DELETE FROM files');
+        db.getDb().exec('DELETE FROM items');
+    }
 
     if (projectName) {
         db.setMetadata('project_name', projectName);

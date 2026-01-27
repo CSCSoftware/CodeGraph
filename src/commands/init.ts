@@ -19,12 +19,14 @@ export interface InitParams {
     name?: string;
     languages?: string[];
     exclude?: string[];
+    fresh?: boolean;  // Force fresh re-index (delete all existing data)
 }
 
 export interface InitResult {
     success: boolean;
     codegraphPath: string;
     filesIndexed: number;
+    filesSkipped: number;  // Unchanged files
     itemsFound: number;
     methodsFound: number;
     typesFound: number;
@@ -65,6 +67,31 @@ const DEFAULT_EXCLUDE = [
     '**/*.g.cs',             // C# source generators
     '**/*.Designer.cs',      // WinForms designer
 ];
+
+// ============================================================
+// .gitignore support
+// ============================================================
+
+function readGitignore(projectPath: string): string[] {
+    const gitignorePath = join(projectPath, '.gitignore');
+    if (!existsSync(gitignorePath)) return [];
+
+    const content = readFileSync(gitignorePath, 'utf-8');
+    return content
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'))  // Keine Kommentare/Leerzeilen
+        .map(pattern => {
+            // Glob-kompatibel machen
+            if (pattern.endsWith('/')) {
+                return `**/${pattern}**`;  // Verzeichnis: foo/ → **/foo/**
+            }
+            if (!pattern.includes('/') && !pattern.startsWith('*')) {
+                return `**/${pattern}`;    // Datei/Ordner: foo → **/foo
+            }
+            return pattern;
+        });
+}
 
 // ============================================================
 // File type detection
@@ -129,6 +156,7 @@ export async function init(params: InitParams): Promise<InitResult> {
             success: false,
             codegraphPath: '',
             filesIndexed: 0,
+            filesSkipped: 0,
             itemsFound: 0,
             methodsFound: 0,
             typesFound: 0,
@@ -143,6 +171,7 @@ export async function init(params: InitParams): Promise<InitResult> {
             success: false,
             codegraphPath: '',
             filesIndexed: 0,
+            filesSkipped: 0,
             itemsFound: 0,
             methodsFound: 0,
             typesFound: 0,
@@ -160,16 +189,21 @@ export async function init(params: InitParams): Promise<InitResult> {
     const dbPath = join(codegraphDir, 'index.db');
     const projectName = params.name ?? basename(params.path);
 
-    // Create database
-    const db = createDatabase(dbPath, projectName, params.path);
+    // Determine if incremental (default) or fresh re-index
+    const dbExists = existsSync(dbPath);
+    const incremental = dbExists && !params.fresh;
+
+    // Create database (incremental keeps existing data)
+    const db = createDatabase(dbPath, projectName, params.path, incremental);
     const queries = createQueries(db);
 
     // Build glob pattern for supported files
     const extensions = getSupportedExtensions();
     const patterns = extensions.map(ext => `**/*${ext}`);
 
-    // Merge exclude patterns
-    const exclude = [...DEFAULT_EXCLUDE, ...(params.exclude ?? [])];
+    // Merge exclude patterns (including .gitignore)
+    const gitignorePatterns = readGitignore(params.path);
+    const exclude = [...DEFAULT_EXCLUDE, ...gitignorePatterns, ...(params.exclude ?? [])];
 
     // Find all source files
     let files: string[] = [];
@@ -188,6 +222,7 @@ export async function init(params: InitParams): Promise<InitResult> {
 
     // Index each file
     let filesIndexed = 0;
+    let filesSkipped = 0;
     let totalItems = 0;
     let totalMethods = 0;
     let totalTypes = 0;
@@ -196,8 +231,10 @@ export async function init(params: InitParams): Promise<InitResult> {
     db.transaction(() => {
         for (const filePath of files) {
             try {
-                const result = indexFile(params.path, filePath, db, queries);
-                if (result.success) {
+                const result = indexFile(params.path, filePath, db, queries, incremental);
+                if (result.skipped) {
+                    filesSkipped++;
+                } else if (result.success) {
                     filesIndexed++;
                     totalItems += result.items;
                     totalMethods += result.methods;
@@ -254,12 +291,19 @@ export async function init(params: InitParams): Promise<InitResult> {
         }
     });
 
+    // Reset session tracking after full re-index
+    const now = Date.now().toString();
+    db.setMetadata('last_session_start', now);
+    db.setMetadata('last_session_end', now);
+    db.setMetadata('current_session_start', now);
+
     db.close();
 
     return {
         success: true,
         codegraphPath: codegraphDir,
         filesIndexed,
+        filesSkipped,
         itemsFound: totalItems,
         methodsFound: totalMethods,
         typesFound: totalTypes,
@@ -274,6 +318,7 @@ export async function init(params: InitParams): Promise<InitResult> {
 
 interface IndexFileResult {
     success: boolean;
+    skipped?: boolean;
     items: number;
     methods: number;
     types: number;
@@ -284,7 +329,8 @@ function indexFile(
     projectPath: string,
     relativePath: string,
     db: CodeGraphDatabase,
-    queries: Queries
+    queries: Queries,
+    incremental: boolean = false
 ): IndexFileResult {
     const absolutePath = join(projectPath, relativePath);
 
@@ -304,6 +350,25 @@ function indexFile(
 
     // Calculate hash
     const hash = createHash('sha256').update(content).digest('hex').substring(0, 16);
+
+    // In incremental mode, skip unchanged files
+    if (incremental) {
+        const existingFile = queries.getFileByPath(relativePath);
+        if (existingFile && existingFile.hash === hash) {
+            return {
+                success: true,
+                skipped: true,
+                items: 0,
+                methods: 0,
+                types: 0,
+            };
+        }
+        // File changed - clear old data before re-indexing
+        if (existingFile) {
+            queries.clearFileData(existingFile.id);
+            queries.deleteFile(existingFile.id);
+        }
+    }
 
     // Extract data from file
     const extraction = extract(content, relativePath);
