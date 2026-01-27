@@ -9,3 +9,4 @@ export { update, remove, type UpdateParams, type UpdateResult, type RemoveParams
 export { summary, tree, describe, type SummaryParams, type SummaryResult, type TreeParams, type TreeResult, type TreeEntry, type DescribeParams, type DescribeResult } from './summary.js';
 export { link, unlink, listLinks, type LinkParams, type LinkResult, type UnlinkParams, type UnlinkResult, type ListLinksParams, type ListLinksResult, type LinkedProject } from './link.js';
 export { scan, type ScanParams, type ScanResult, type IndexedProject } from './scan.js';
+export { files, type FilesParams, type FilesResult, type ProjectFile } from './files.js';

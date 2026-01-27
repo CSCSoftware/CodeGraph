@@ -62,6 +62,9 @@ AI: codegraph_query({ term: "PlayerHealth" })
    ```
    codegraph_query({ term: "Calculate", mode: "starts_with" })
    → All functions starting with "Calculate" + exact line numbers
+
+   codegraph_query({ term: "Player", modified_since: "2h" })
+   → Only matches changed in the last 2 hours
    ```
 
 3. **Get file overviews without reading entire files**
@@ -79,6 +82,8 @@ The index lives in `.codegraph/index.db` (SQLite) - fast, portable, no external 
 - **Project Summary**: Auto-detected entry points, main classes, language breakdown
 - **Incremental Updates**: Re-index single files after changes
 - **Cross-Project Links**: Query across multiple related projects
+- **Time-based Filtering**: Find what changed in the last hour, day, or week
+- **Project Structure**: Query all files (code, config, docs, assets) without filesystem access
 
 ## Supported Languages
 
@@ -181,6 +186,35 @@ codegraph_init({ path: "/path/to/your/project" })
 | `codegraph_links` | List linked projects |
 | `codegraph_status` | Index statistics |
 | `codegraph_scan` | Find indexed projects in directory tree |
+| `codegraph_files` | List project files by type (code/config/doc/asset) |
+
+## Time-based Filtering
+
+Track what changed recently with `modified_since` and `modified_before`:
+
+```
+codegraph_query({ term: "render", modified_since: "2h" })   # Last 2 hours
+codegraph_query({ term: "User", modified_since: "1d" })     # Last day
+codegraph_query({ term: "API", modified_since: "1w" })      # Last week
+```
+
+Supported formats:
+- **Relative**: `30m` (minutes), `2h` (hours), `1d` (days), `1w` (weeks)
+- **ISO date**: `2026-01-27` or `2026-01-27T14:30:00`
+
+Perfect for questions like *"What did I change in the last hour?"*
+
+## Project Structure
+
+CodeGraph indexes ALL files in your project (not just code), letting you query the structure:
+
+```
+codegraph_files({ path: ".", type: "config" })  # All config files
+codegraph_files({ path: ".", type: "test" })    # All test files
+codegraph_files({ path: ".", pattern: "**/*.md" })  # All markdown files
+```
+
+File types: `code`, `config`, `doc`, `asset`, `test`, `other`, `dir`
 
 ## CLI Usage
 

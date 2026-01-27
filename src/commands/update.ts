@@ -41,7 +41,9 @@ export interface UpdateResult {
 
 export function update(params: UpdateParams): UpdateResult {
     const startTime = Date.now();
-    const { path: projectPath, file: relativePath } = params;
+    const { path: projectPath } = params;
+    // Normalize path to forward slashes (consistent with how paths are stored)
+    const relativePath = params.file.replace(/\\/g, '/');
 
     // Validate project path
     const codegraphDir = join(projectPath, '.codegraph');
@@ -144,6 +146,26 @@ export function update(params: UpdateParams): UpdateResult {
             oldTypeCount = queries.getTypesByFile(existingFile.id).length;
         }
 
+        // Split content into lines for hashing
+        const contentLines = content.split('\n');
+        const now = Date.now();
+
+        // Build map of old line hashes to modified timestamps (for diff tracking)
+        // Key is the hash, not line_number - so moved lines keep their timestamp
+        const oldHashToModified = new Map<string, number>();
+        if (existingFile) {
+            const oldLines = queries.getLinesByFile(existingFile.id);
+            for (const line of oldLines) {
+                if (line.line_hash && line.modified) {
+                    // If same hash appears multiple times, keep the oldest timestamp
+                    const existing = oldHashToModified.get(line.line_hash);
+                    if (!existing || line.modified < existing) {
+                        oldHashToModified.set(line.line_hash, line.modified);
+                    }
+                }
+            }
+        }
+
         // Perform update in transaction
         let fileId: number;
         let newItemCount = 0;
@@ -161,10 +183,17 @@ export function update(params: UpdateParams): UpdateResult {
                 fileId = queries.insertFile(relativePath, newHash);
             }
 
-            // Insert lines
+            // Insert lines with diff tracking
             let lineId = 1;
             for (const line of extraction.lines) {
-                queries.insertLine(fileId, lineId++, line.lineNumber, line.lineType);
+                const lineContent = contentLines[line.lineNumber - 1] ?? '';
+                const lineHash = createHash('sha256').update(lineContent).digest('hex').substring(0, 16);
+
+                // Check if this hash existed before (regardless of line number)
+                const oldModified = oldHashToModified.get(lineHash);
+                const modified = oldModified ?? now;  // Keep old timestamp if hash existed
+
+                queries.insertLine(fileId, lineId++, line.lineNumber, line.lineType, lineHash, modified);
             }
 
             // Build line number to line ID mapping
@@ -181,7 +210,13 @@ export function update(params: UpdateParams): UpdateResult {
                 if (itemLineId === undefined) {
                     // Line wasn't recorded, add it now
                     const newLineId = lineId++;
-                    queries.insertLine(fileId, newLineId, item.lineNumber, item.lineType);
+                    const lineContent = contentLines[item.lineNumber - 1] ?? '';
+                    const lineHash = createHash('sha256').update(lineContent).digest('hex').substring(0, 16);
+
+                    const oldModified = oldHashToModified.get(lineHash);
+                    const modified = oldModified ?? now;
+
+                    queries.insertLine(fileId, newLineId, item.lineNumber, item.lineType, lineHash, modified);
                     lineNumberToId.set(item.lineNumber, newLineId);
                     itemLineId = newLineId;
                 }
@@ -262,7 +297,9 @@ export interface RemoveResult {
 }
 
 export function remove(params: RemoveParams): RemoveResult {
-    const { path: projectPath, file: relativePath } = params;
+    const { path: projectPath } = params;
+    // Normalize path to forward slashes
+    const relativePath = params.file.replace(/\\/g, '/');
 
     // Validate project path
     const codegraphDir = join(projectPath, '.codegraph');
