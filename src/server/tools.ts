@@ -505,7 +505,11 @@ async function handleInit(args: Record<string, unknown>): Promise<{ content: Arr
     if (result.success) {
         let message = `✓ CodeGraph initialized for project\n\n`;
         message += `Database: ${result.codegraphPath}/index.db\n`;
-        message += `Files indexed: ${result.filesIndexed}\n`;
+        message += `Files indexed: ${result.filesIndexed}`;
+        if (result.filesSkipped > 0) {
+            message += ` (${result.filesSkipped} unchanged, skipped)`;
+        }
+        message += `\n`;
         message += `Items found: ${result.itemsFound}\n`;
         message += `Methods found: ${result.methodsFound}\n`;
         message += `Types found: ${result.typesFound}\n`;

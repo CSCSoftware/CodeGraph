@@ -2,6 +2,27 @@
 
 All notable changes to CodeGraph will be documented in this file.
 
+## [1.3.0] - 2026-01-27
+
+### Added
+- **Interactive Viewer**: New `codegraph_viewer` tool opens a browser-based project explorer
+  - Interactive file tree (click to expand directories)
+  - Click files to view signatures (types, methods)
+  - Tabs: Code files / All files, Overview / Source code
+  - **Live reload** with chokidar file watcher
+  - WebSocket for real-time updates
+  - Syntax highlighting with highlight.js
+  - Runs on `http://localhost:3333`
+- **Recent Files Filter**: New `modified_since` parameter for `codegraph_files`
+  - Find files changed in current session: `modified_since: "30m"`
+  - Supports relative time (`2h`, `1d`, `1w`) and ISO dates
+
+### Changed
+- Viewer auto-reindexes changed files before refreshing tree
+
+### Fixed
+- Server version now correctly reports 1.3.0
+
 ## [1.2.0] - 2026-01-27
 
 ### Added

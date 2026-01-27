@@ -8,8 +8,6 @@
  * - Auto-generated notes before session end
  *
  * v1.3.0 - Session tracking integration
- * v1.3.0 - Live reload in viewer (chokidar)
- * v1.3.1 - Test edit for viewer live-reload
  */
 
 import { existsSync } from 'fs';
