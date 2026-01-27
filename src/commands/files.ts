@@ -1,11 +1,15 @@
 /**
  * codegraph_files command - List project files and directories
+ *
+ * Supports time-based filtering via modified_since parameter to find
+ * files that were recently indexed (useful for "what changed this session?")
  */
 
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { openDatabase, createQueries } from '../db/index.js';
-import type { ProjectFileRow } from '../db/queries.js';
+import { parseTimeOffset } from './query.js';
+import type { ProjectFileRow, FileRow } from '../db/queries.js';
 
 // ============================================================
 // Types
@@ -13,8 +17,9 @@ import type { ProjectFileRow } from '../db/queries.js';
 
 export interface FilesParams {
     path: string;
-    type?: string;      // Filter by type: dir, code, config, doc, asset, test, other
-    pattern?: string;   // Glob pattern filter
+    type?: string;           // Filter by type: dir, code, config, doc, asset, test, other
+    pattern?: string;        // Glob pattern filter
+    modifiedSince?: string;  // Only files indexed after this time (2h, 30m, 1d, 1w, or ISO date)
 }
 
 export interface ProjectFile {
@@ -22,6 +27,7 @@ export interface ProjectFile {
     type: string;
     extension: string | null;
     indexed: boolean;
+    lastIndexed?: number;  // Timestamp when file was last indexed (only for code files)
 }
 
 export interface FilesResult {
@@ -37,7 +43,7 @@ export interface FilesResult {
 // ============================================================
 
 export function files(params: FilesParams): FilesResult {
-    const { path: projectPath, type, pattern } = params;
+    const { path: projectPath, type, pattern, modifiedSince } = params;
 
     // Validate project path
     const dbPath = join(projectPath, '.codegraph', 'index.db');
@@ -57,6 +63,27 @@ export function files(params: FilesParams): FilesResult {
     const queries = createQueries(db);
 
     try {
+        // Parse time filter
+        const modifiedSinceTs = modifiedSince ? parseTimeOffset(modifiedSince) : null;
+
+        // If time filter is specified, get recently indexed files from the files table
+        let recentlyIndexedPaths: Set<string> | null = null;
+        let indexedFilesMap: Map<string, FileRow> | null = null;
+
+        if (modifiedSinceTs !== null) {
+            // Get all indexed files and filter by last_indexed
+            const allIndexedFiles = queries.getAllFiles();
+            recentlyIndexedPaths = new Set<string>();
+            indexedFilesMap = new Map<string, FileRow>();
+
+            for (const file of allIndexedFiles) {
+                indexedFilesMap.set(file.path, file);
+                if (file.last_indexed >= modifiedSinceTs) {
+                    recentlyIndexedPaths.add(file.path);
+                }
+            }
+        }
+
         // Get files, optionally filtered by type
         let projectFiles: ProjectFileRow[];
 
@@ -72,6 +99,11 @@ export function files(params: FilesParams): FilesResult {
             projectFiles = projectFiles.filter(f => regex.test(f.path));
         }
 
+        // Apply time filter if specified (only show files indexed after the timestamp)
+        if (recentlyIndexedPaths !== null) {
+            projectFiles = projectFiles.filter(f => recentlyIndexedPaths!.has(f.path));
+        }
+
         // Build type statistics
         const byType: Record<string, number> = {};
         for (const file of projectFiles) {
@@ -79,12 +111,17 @@ export function files(params: FilesParams): FilesResult {
         }
 
         // Convert to output format
-        const result: ProjectFile[] = projectFiles.map(f => ({
-            path: f.path,
-            type: f.type,
-            extension: f.extension,
-            indexed: f.indexed === 1,
-        }));
+        const result: ProjectFile[] = projectFiles.map(f => {
+            const indexed = f.indexed === 1;
+            const indexedFile = indexedFilesMap?.get(f.path);
+            return {
+                path: f.path,
+                type: f.type,
+                extension: f.extension,
+                indexed,
+                lastIndexed: indexedFile?.last_indexed,
+            };
+        });
 
         db.close();
 

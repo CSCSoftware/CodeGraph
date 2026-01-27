@@ -28,6 +28,7 @@ Complete reference for all CodeGraph MCP tools.
 - [Session Management](#session-management)
   - [codegraph_session](#codegraph_session)
   - [codegraph_note](#codegraph_note)
+  - [codegraph_viewer](#codegraph_viewer)
 
 ---
 
@@ -315,7 +316,7 @@ Get file tree with optional statistics per file.
 
 ### codegraph_files
 
-List all project files by type. Includes non-code files (config, docs, assets).
+List all project files by type. Includes non-code files (config, docs, assets). Supports time-based filtering to find recently changed files.
 
 **Parameters:**
 
@@ -324,11 +325,13 @@ List all project files by type. Includes non-code files (config, docs, assets).
 | `path` | string | ✅ | Path to project with `.codegraph` directory |
 | `type` | string | - | Filter by type: `dir`, `code`, `config`, `doc`, `asset`, `test`, `other` |
 | `pattern` | string | - | Glob pattern filter (e.g., `"**/*.md"`, `"src/**/*.ts"`) |
+| `modified_since` | string | - | Only files indexed after this time. Formats: `30m`, `2h`, `1d`, `1w`, or ISO date |
 
 **Returns:**
 - Files grouped by directory
 - Type statistics
 - Indexed indicator (✓) for code files
+- `lastIndexed` timestamp (when `modified_since` is used)
 
 **Examples:**
 ```json
@@ -340,6 +343,12 @@ List all project files by type. Includes non-code files (config, docs, assets).
 
 // All test files
 { "path": ".", "type": "test" }
+
+// Files changed in the last 30 minutes (this session)
+{ "path": ".", "modified_since": "30m" }
+
+// Files changed in the last 2 hours
+{ "path": ".", "modified_since": "2h" }
 ```
 
 **File type detection:**
@@ -576,6 +585,44 @@ Read or write session notes. Persists in the database between sessions.
 
 // Clear note
 { "path": ".", "clear": true }
+```
+
+---
+
+### codegraph_viewer
+
+Open an interactive project tree viewer in the browser. Provides visual exploration with live updates.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `action` | string | - | `open` (default) or `close` |
+
+**Features:**
+
+- **Interactive file tree** - Click directories to expand, click files to view signatures
+- **Live reload** - File changes detected automatically via chokidar file watcher
+- **Signature display** - Shows types (classes, interfaces) and methods with line numbers
+- **WebSocket updates** - Real-time sync between file changes and browser
+
+**Server:**
+- Runs on `http://localhost:3333`
+- Persistent until explicitly closed or MCP server restart
+
+**Examples:**
+```json
+// Open viewer
+{ "path": "." }
+
+// Close viewer
+{ "path": ".", "action": "close" }
+```
+
+**Output example:**
+```
+🖥️ Viewer opened at http://localhost:3333
 ```
 
 ---
