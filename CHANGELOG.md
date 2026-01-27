@@ -2,6 +2,28 @@
 
 All notable changes to CodeGraph will be documented in this file.
 
+## [1.1.0] - 2026-01-27
+
+### Added
+- **Time-based Filtering**: New `modified_since` and `modified_before` parameters for `codegraph_query`
+  - Relative time: `30m`, `2h`, `1d`, `1w`
+  - ISO dates: `2026-01-27` or `2026-01-27T14:30:00`
+  - Track line-level changes across updates
+- **Project Structure**: New `codegraph_files` tool to query all project files
+  - File types: `code`, `config`, `doc`, `asset`, `test`, `other`, `dir`
+  - Glob pattern filtering
+  - Statistics by file type
+
+### Changed
+- `codegraph_init` now indexes complete project structure (all files, not just code)
+- `codegraph_update` preserves modification timestamps for unchanged lines (hash-based diff)
+- Path normalization to forward slashes across all commands
+
+### Technical
+- New `project_files` table in database schema
+- New `line_hash` and `modified` columns in `lines` table
+- Hash-based change detection for accurate timestamps
+
 ## [1.0.0] - 2026-01-27
 
 ### Added

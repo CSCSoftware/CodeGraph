@@ -53,6 +53,7 @@ Registered in `~/.claude/settings.json`:
 | `codegraph_unlink` | Remove linked dependency |
 | `codegraph_links` | List all linked dependencies |
 | `codegraph_scan` | Find all .codegraph directories in a path |
+| `codegraph_files` | List project files by type (code/config/doc/asset/test) |
 
 ## CLI Commands
 
@@ -105,20 +106,22 @@ src/
     ├── update.ts         # codegraph_update, codegraph_remove
     ├── summary.ts        # codegraph_summary, codegraph_tree, codegraph_describe
     ├── link.ts           # codegraph_link, codegraph_unlink, codegraph_links
-    └── scan.ts           # codegraph_scan
+    ├── scan.ts           # codegraph_scan
+    └── files.ts          # codegraph_files
 ```
 
 ## Database Schema
 
 SQLite with WAL mode. Key tables:
 - `files` - File tree with path, hash, last_indexed
-- `lines` - Line objects with composite key (file_id, id)
+- `lines` - Line objects with line_hash and modified timestamp
 - `items` - Indexed terms (case-insensitive)
 - `occurrences` - Item locations (item_id, file_id, line_id)
 - `signatures` - Header comments per file
 - `methods` - Method prototypes
 - `types` - Class/struct/interface definitions
 - `dependencies` - Links to other CodeGraph instances
+- `project_files` - All project files with type (code/config/doc/asset/test)
 
 ## Key Implementation Details
 
@@ -164,5 +167,60 @@ Tested with real open-source projects in `SampleLangProjects/`:
 ### Feature Tests Passed
 - **codegraph_scan**: Finds all indexed projects in directory tree
 - **codegraph_link**: Links projects, no duplicates on re-link, graceful unlink
-- **codegraph_update**: Detects hash match, adds new items, removes deleted items
+- **codegraph_update**: Detects hash match, adds new items, removes deleted items, preserves timestamps
+- **codegraph_files**: Lists all project files by type with statistics
+- **Time filtering**: `modified_since`/`modified_before` with relative (2h, 1d, 1w) and ISO dates
 - **Keyword filtering**: Language keywords excluded from index, identifiers included
+
+### Time-based Filtering (v1.1.0)
+Query for recent changes:
+```
+codegraph_query({ term: "render", modified_since: "2h" })   # Last 2 hours
+codegraph_query({ term: "User", modified_since: "1d" })     # Last day
+codegraph_query({ term: "API", modified_before: "2026-01-20" })  # Before date
+```
+
+### Project Structure (v1.1.0)
+Query all files in project:
+```
+codegraph_files({ path: ".", type: "config" })  # All config files
+codegraph_files({ path: ".", type: "test" })    # All test files
+codegraph_files({ path: ".", pattern: "**/*.md" })  # Glob filter
+```
+File types: `code`, `config`, `doc`, `asset`, `test`, `other`, `dir`
+
+---
+
+## Future Feature Ideas
+
+### PreToolUse Hook (Experimental)
+**Ziel:** Automatisch CodeGraph vorschlagen wenn .codegraph/ existiert
+
+Claude Code unterstützt Hooks in `~/.claude/settings.json`:
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Glob",
+        "command": "node path/to/check-codegraph.js"
+      }
+    ]
+  }
+}
+```
+
+**Einschränkungen aus Recherche (Jan 2026):**
+- Hooks können Tools NICHT umleiten, nur Parameter ändern oder allow/deny
+- Könnte aber eine Warnung/Hinweis ausgeben wenn .codegraph/ existiert
+- Noch experimentell - MCP-Protokoll hat keine eingebaute Tool-Priorisierung
+
+**Alternativer Ansatz:**
+Ein "Meta-Tool" das entscheidet welches Such-Tool zu verwenden:
+```
+codegraph_smart_search → prüft ob .codegraph existiert
+  → ja: ruft codegraph_query auf
+  → nein: ruft grep auf
+```
+
+**Status:** Idee für spätere Implementierung

@@ -3,7 +3,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, statSync } from 'fs';
-import { join, relative, basename } from 'path';
+import { join, relative, basename, extname } from 'path';
 import { glob } from 'glob';
 import { createHash } from 'crypto';
 
@@ -49,6 +49,55 @@ const DEFAULT_EXCLUDE = [
     '**/*.min.js',
     '**/*.generated.*',
 ];
+
+// ============================================================
+// File type detection
+// ============================================================
+
+const CODE_EXTENSIONS = new Set([
+    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+    '.cs', '.rs', '.py', '.pyw',
+    '.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hxx',
+    '.java', '.go', '.php', '.rb', '.rake'
+]);
+
+const CONFIG_EXTENSIONS = new Set([
+    '.json', '.yaml', '.yml', '.toml', '.xml', '.ini', '.env', '.config',
+    '.eslintrc', '.prettierrc', '.babelrc', '.editorconfig'
+]);
+
+const DOC_EXTENSIONS = new Set([
+    '.md', '.txt', '.rst', '.adoc', '.doc', '.docx', '.pdf'
+]);
+
+const ASSET_EXTENSIONS = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
+    '.woff', '.woff2', '.ttf', '.eot', '.otf',
+    '.mp3', '.mp4', '.wav', '.ogg', '.webm',
+    '.zip', '.tar', '.gz', '.rar'
+]);
+
+type FileType = 'dir' | 'code' | 'config' | 'doc' | 'asset' | 'test' | 'other';
+
+function detectFileType(filePath: string): FileType {
+    const ext = extname(filePath).toLowerCase();
+    const lowerPath = filePath.toLowerCase();
+
+    // Check for test files first (before code check)
+    if (lowerPath.includes('.test.') || lowerPath.includes('.spec.') ||
+        lowerPath.includes('_test.') || lowerPath.includes('_spec.') ||
+        lowerPath.includes('/test/') || lowerPath.includes('/tests/') ||
+        lowerPath.includes('/__tests__/')) {
+        return 'test';
+    }
+
+    if (CODE_EXTENSIONS.has(ext)) return 'code';
+    if (CONFIG_EXTENSIONS.has(ext)) return 'config';
+    if (DOC_EXTENSIONS.has(ext)) return 'doc';
+    if (ASSET_EXTENSIONS.has(ext)) return 'asset';
+
+    return 'other';
+}
 
 // ============================================================
 // Main init function
@@ -118,8 +167,8 @@ export async function init(params: InitParams): Promise<InitResult> {
         files.push(...found);
     }
 
-    // Remove duplicates and sort
-    files = [...new Set(files)].sort();
+    // Remove duplicates, normalize to forward slashes, and sort
+    files = [...new Set(files)].map(f => f.replace(/\\/g, '/')).sort();
 
     // Index each file
     let filesIndexed = 0;
@@ -148,6 +197,46 @@ export async function init(params: InitParams): Promise<InitResult> {
 
     // Cleanup unused items
     queries.deleteUnusedItems();
+
+    // --------------------------------------------------------
+    // Scan project structure (all files, not just code)
+    // --------------------------------------------------------
+    const indexedFilesSet = new Set(files);  // Code files we indexed
+
+    // Find ALL files in project
+    const allFiles = await glob('**/*', {
+        cwd: params.path,
+        ignore: exclude,
+        nodir: true,
+        absolute: false,
+    });
+
+    // Normalize paths and collect directories
+    const directories = new Set<string>();
+    const normalizedAllFiles = allFiles.map(f => f.replace(/\\/g, '/'));
+
+    for (const filePath of normalizedAllFiles) {
+        // Extract all parent directories
+        const parts = filePath.split('/');
+        for (let i = 1; i < parts.length; i++) {
+            directories.add(parts.slice(0, i).join('/'));
+        }
+    }
+
+    // Insert directories
+    db.transaction(() => {
+        for (const dir of directories) {
+            queries.insertProjectFile(dir, 'dir', null, false);
+        }
+
+        // Insert all files with type detection
+        for (const filePath of normalizedAllFiles) {
+            const ext = extname(filePath).toLowerCase() || null;
+            const fileType = detectFileType(filePath);
+            const isIndexed = indexedFilesSet.has(filePath);
+            queries.insertProjectFile(filePath, fileType, ext, isIndexed);
+        }
+    });
 
     db.close();
 
@@ -215,10 +304,16 @@ function indexFile(
     // Insert file record
     const fileId = queries.insertFile(relativePath, hash);
 
-    // Insert lines
+    // Split content into lines for hashing
+    const contentLines = content.split('\n');
+    const now = Date.now();
+
+    // Insert lines with hash
     let lineId = 1;
     for (const line of extraction.lines) {
-        queries.insertLine(fileId, lineId++, line.lineNumber, line.lineType);
+        const lineContent = contentLines[line.lineNumber - 1] ?? '';
+        const lineHash = createHash('sha256').update(lineContent).digest('hex').substring(0, 16);
+        queries.insertLine(fileId, lineId++, line.lineNumber, line.lineType, lineHash, now);
     }
 
     // Build line number to line ID mapping
@@ -235,7 +330,9 @@ function indexFile(
         if (lineIdForItem === undefined) {
             // Line wasn't recorded, add it now
             const newLineId = lineId++;
-            queries.insertLine(fileId, newLineId, item.lineNumber, item.lineType);
+            const lineContent = contentLines[item.lineNumber - 1] ?? '';
+            const lineHash = createHash('sha256').update(lineContent).digest('hex').substring(0, 16);
+            queries.insertLine(fileId, newLineId, item.lineNumber, item.lineType, lineHash, now);
             lineNumberToId.set(item.lineNumber, newLineId);
         }
 

@@ -64,7 +64,9 @@ export interface SignaturesResult {
  * Get signature for a single file
  */
 export function signature(params: SignatureParams): SignatureResult {
-    const { path: projectPath, file } = params;
+    const { path: projectPath } = params;
+    // Normalize path to forward slashes
+    const file = params.file.replace(/\\/g, '/');
 
     // Validate project path
     const codegraphDir = join(projectPath, '.codegraph');
@@ -86,15 +88,8 @@ export function signature(params: SignatureParams): SignatureResult {
     const queries = createQueries(db);
 
     try {
-        // Normalize file path - try both forward and backslashes
-        const normalizedForward = file.replace(/\\/g, '/');
-        const normalizedBack = file.replace(/\//g, '\\');
-
-        // Find file in database (try both path formats)
-        let fileRow = queries.getFileByPath(normalizedForward);
-        if (!fileRow) {
-            fileRow = queries.getFileByPath(normalizedBack);
-        }
+        // Find file in database
+        const fileRow = queries.getFileByPath(file);
         if (!fileRow) {
             db.close();
             return {

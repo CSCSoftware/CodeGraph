@@ -21,6 +21,8 @@ export interface LineRow {
     file_id: number;
     line_number: number;
     line_type: 'code' | 'comment' | 'struct' | 'method' | 'property' | 'string';
+    line_hash: string | null;
+    modified: number | null;
 }
 
 export interface ItemRow {
@@ -63,6 +65,14 @@ export interface DependencyRow {
     path: string;
     name: string | null;
     last_checked: number | null;
+}
+
+export interface ProjectFileRow {
+    id: number;
+    path: string;
+    type: 'dir' | 'code' | 'config' | 'doc' | 'asset' | 'test' | 'other';
+    extension: string | null;
+    indexed: number;
 }
 
 // ============================================================
@@ -158,11 +168,11 @@ export class Queries {
     // Lines
     // --------------------------------------------------------
 
-    insertLine(fileId: number, lineId: number, lineNumber: number, lineType: LineRow['line_type']): void {
+    insertLine(fileId: number, lineId: number, lineNumber: number, lineType: LineRow['line_type'], lineHash?: string, modified?: number): void {
         this._insertLine ??= this.db.prepare(
-            'INSERT INTO lines (file_id, id, line_number, line_type) VALUES (?, ?, ?, ?)'
+            'INSERT INTO lines (file_id, id, line_number, line_type, line_hash, modified) VALUES (?, ?, ?, ?, ?, ?)'
         );
-        this._insertLine.run(fileId, lineId, lineNumber, lineType);
+        this._insertLine.run(fileId, lineId, lineNumber, lineType, lineHash ?? null, modified ?? Date.now());
     }
 
     getLinesByFile(fileId: number): LineRow[] {
@@ -239,16 +249,16 @@ export class Queries {
         this._insertOccurrence.run(itemId, fileId, lineId);
     }
 
-    getOccurrencesByItem(itemId: number): Array<{ file_id: number; line_id: number; line_number: number; path: string; line_type: string }> {
+    getOccurrencesByItem(itemId: number): Array<{ file_id: number; line_id: number; line_number: number; path: string; line_type: string; modified: number | null }> {
         this._getOccurrencesByItem ??= this.db.prepare(`
-            SELECT o.file_id, o.line_id, l.line_number, f.path, l.line_type
+            SELECT o.file_id, o.line_id, l.line_number, f.path, l.line_type, l.modified
             FROM occurrences o
             JOIN lines l ON o.file_id = l.file_id AND o.line_id = l.id
             JOIN files f ON o.file_id = f.id
             WHERE o.item_id = ?
             ORDER BY f.path, l.line_number
         `);
-        return this._getOccurrencesByItem.all(itemId) as Array<{ file_id: number; line_id: number; line_number: number; path: string; line_type: string }>;
+        return this._getOccurrencesByItem.all(itemId) as Array<{ file_id: number; line_id: number; line_number: number; path: string; line_type: string; modified: number | null }>;
     }
 
     getOccurrencesByFile(fileId: number): OccurrenceRow[] {
@@ -404,12 +414,13 @@ export class Queries {
     /**
      * Bulk insert lines
      */
-    bulkInsertLines(fileId: number, lines: Array<{ lineId: number; lineNumber: number; lineType: LineRow['line_type'] }>): void {
+    bulkInsertLines(fileId: number, lines: Array<{ lineId: number; lineNumber: number; lineType: LineRow['line_type']; lineHash?: string; modified?: number }>): void {
         const stmt = this.db.prepare(
-            'INSERT INTO lines (file_id, id, line_number, line_type) VALUES (?, ?, ?, ?)'
+            'INSERT INTO lines (file_id, id, line_number, line_type, line_hash, modified) VALUES (?, ?, ?, ?, ?, ?)'
         );
+        const now = Date.now();
         for (const line of lines) {
-            stmt.run(fileId, line.lineId, line.lineNumber, line.lineType);
+            stmt.run(fileId, line.lineId, line.lineNumber, line.lineType, line.lineHash ?? null, line.modified ?? now);
         }
     }
 
@@ -423,6 +434,41 @@ export class Queries {
         for (const occ of occurrences) {
             stmt.run(occ.itemId, occ.fileId, occ.lineId);
         }
+    }
+
+    // --------------------------------------------------------
+    // Project Files (project structure)
+    // --------------------------------------------------------
+
+    private _insertProjectFile?: Database.Statement;
+    private _getProjectFiles?: Database.Statement;
+    private _getProjectFilesByType?: Database.Statement;
+    private _clearProjectFiles?: Database.Statement;
+
+    insertProjectFile(path: string, type: ProjectFileRow['type'], extension: string | null, indexed: boolean): void {
+        this._insertProjectFile ??= this.db.prepare(
+            'INSERT OR REPLACE INTO project_files (path, type, extension, indexed) VALUES (?, ?, ?, ?)'
+        );
+        this._insertProjectFile.run(path, type, extension, indexed ? 1 : 0);
+    }
+
+    getProjectFiles(): ProjectFileRow[] {
+        this._getProjectFiles ??= this.db.prepare(
+            'SELECT * FROM project_files ORDER BY path'
+        );
+        return this._getProjectFiles.all() as ProjectFileRow[];
+    }
+
+    getProjectFilesByType(type: ProjectFileRow['type']): ProjectFileRow[] {
+        this._getProjectFilesByType ??= this.db.prepare(
+            'SELECT * FROM project_files WHERE type = ? ORDER BY path'
+        );
+        return this._getProjectFilesByType.all(type) as ProjectFileRow[];
+    }
+
+    clearProjectFiles(): void {
+        this._clearProjectFiles ??= this.db.prepare('DELETE FROM project_files');
+        this._clearProjectFiles.run();
     }
 }
 

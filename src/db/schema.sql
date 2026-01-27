@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS lines (
     file_id INTEGER NOT NULL,
     line_number INTEGER NOT NULL,
     line_type TEXT NOT NULL CHECK(line_type IN ('code', 'comment', 'struct', 'method', 'property', 'string')),
+    line_hash TEXT,
+    modified INTEGER,
     PRIMARY KEY (file_id, id),
     FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
@@ -110,6 +112,20 @@ CREATE TABLE IF NOT EXISTS dependencies (
     name TEXT,
     last_checked INTEGER
 );
+
+-- ------------------------------------------------------------
+-- Projektstruktur (alle Dateien + Verzeichnisse)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS project_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL CHECK(type IN ('dir', 'code', 'config', 'doc', 'asset', 'test', 'other')),
+    extension TEXT,
+    indexed INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_files_path ON project_files(path);
+CREATE INDEX IF NOT EXISTS idx_project_files_type ON project_files(type);
 
 -- ------------------------------------------------------------
 -- Metadaten

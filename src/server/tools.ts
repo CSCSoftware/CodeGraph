@@ -5,7 +5,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, type QueryMode } from '../commands/index.js';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, type QueryMode } from '../commands/index.js';
 import { openDatabase } from '../db/index.js';
 
 /**
@@ -38,7 +38,7 @@ export function registerTools(): Tool[] {
         },
         {
             name: 'codegraph_query',
-            description: 'Search for terms/identifiers in the CodeGraph index. Returns file locations where the term appears.',
+            description: 'Search for terms/identifiers in the CodeGraph index. Returns file locations where the term appears. PREFERRED over Grep/Glob for code searches when .codegraph/ exists - faster and more precise. Use this instead of grep for finding functions, classes, variables by name.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -64,6 +64,14 @@ export function registerTools(): Tool[] {
                         items: { type: 'string' },
                         description: 'Filter by line type: code, comment, method, struct, property',
                     },
+                    modified_since: {
+                        type: 'string',
+                        description: 'Only include lines modified after this time. Supports: "2h" (hours), "30m" (minutes), "1d" (days), "1w" (weeks), or ISO date string',
+                    },
+                    modified_before: {
+                        type: 'string',
+                        description: 'Only include lines modified before this time. Same format as modified_since',
+                    },
                     limit: {
                         type: 'number',
                         description: 'Maximum number of results (default: 100)',
@@ -88,7 +96,7 @@ export function registerTools(): Tool[] {
         },
         {
             name: 'codegraph_signature',
-            description: 'Get the signature of a single file: header comments, types (classes/structs/interfaces), and method prototypes. Useful for understanding a file without reading the full implementation.',
+            description: 'Get the signature of a single file: header comments, types (classes/structs/interfaces), and method prototypes. Use this INSTEAD of reading entire files when you only need to know what methods/classes exist. Much faster than Read tool for understanding file structure.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -106,7 +114,7 @@ export function registerTools(): Tool[] {
         },
         {
             name: 'codegraph_signatures',
-            description: 'Get signatures for multiple files at once. Use a glob pattern or explicit file list. Returns header comments, types, and method prototypes for each file.',
+            description: 'Get signatures for multiple files at once using glob pattern or file list. Returns types and method prototypes. Use INSTEAD of reading multiple files when exploring codebase structure. Much more efficient than multiple Read calls.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -286,7 +294,7 @@ export function registerTools(): Tool[] {
         },
         {
             name: 'codegraph_scan',
-            description: 'Scan a directory tree to find all projects with CodeGraph indexes (.codegraph directories). Useful for discovering indexed projects.',
+            description: 'Scan a directory tree to find all projects with CodeGraph indexes (.codegraph directories). Use this to discover which projects are already indexed before using Grep/Glob - indexed projects should use codegraph_query instead.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -297,6 +305,29 @@ export function registerTools(): Tool[] {
                     max_depth: {
                         type: 'number',
                         description: 'Maximum directory depth to scan (default: 10)',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+        {
+            name: 'codegraph_files',
+            description: 'List all files and directories in the indexed project. Returns the complete project structure with file types (code, config, doc, asset, test, other) and whether each file is indexed for code search.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Path to project with .codegraph directory',
+                    },
+                    type: {
+                        type: 'string',
+                        enum: ['dir', 'code', 'config', 'doc', 'asset', 'test', 'other'],
+                        description: 'Filter by file type',
+                    },
+                    pattern: {
+                        type: 'string',
+                        description: 'Glob pattern to filter files (e.g., "src/**/*.ts")',
                     },
                 },
                 required: ['path'],
@@ -355,6 +386,9 @@ export async function handleToolCall(
 
             case 'codegraph_scan':
                 return handleScan(args);
+
+            case 'codegraph_files':
+                return handleFiles(args);
 
             default:
                 return {
@@ -441,6 +475,8 @@ function handleQuery(args: Record<string, unknown>): { content: Array<{ type: st
         mode: (args.mode as QueryMode) ?? 'exact',
         fileFilter: args.file_filter as string | undefined,
         typeFilter: args.type_filter as string[] | undefined,
+        modifiedSince: args.modified_since as string | undefined,
+        modifiedBefore: args.modified_before as string | undefined,
         limit: args.limit as number | undefined,
     });
 
@@ -1035,6 +1071,90 @@ function handleScan(args: Record<string, unknown>): { content: Array<{ type: str
         message += `- **Files:** ${proj.files} | **Items:** ${proj.items} | **Methods:** ${proj.methods} | **Types:** ${proj.types}\n`;
         message += `- **Last indexed:** ${proj.lastIndexed}\n`;
         message += '\n';
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle codegraph_files
+ */
+function handleFiles(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = files({
+        path,
+        type: args.type as string | undefined,
+        pattern: args.pattern as string | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.files.length === 0) {
+        return {
+            content: [{ type: 'text', text: 'No files found in project.' }],
+        };
+    }
+
+    // Build summary
+    let message = `# Project Files (${result.totalFiles})\n\n`;
+
+    // Type statistics
+    message += `## By Type\n`;
+    for (const [type, count] of Object.entries(result.byType).sort()) {
+        message += `- **${type}:** ${count}\n`;
+    }
+    message += '\n';
+
+    // Group files by directory
+    const byDir = new Map<string, typeof result.files>();
+    for (const file of result.files) {
+        const dir = file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : '.';
+        if (!byDir.has(dir)) {
+            byDir.set(dir, []);
+        }
+        byDir.get(dir)!.push(file);
+    }
+
+    // List files (limit output for large projects)
+    const MAX_ENTRIES = 200;
+    let entriesShown = 0;
+
+    message += `## Files\n`;
+    for (const [dir, dirFiles] of [...byDir.entries()].sort()) {
+        if (entriesShown >= MAX_ENTRIES) {
+            message += `\n... and ${result.totalFiles - entriesShown} more files\n`;
+            break;
+        }
+
+        // Show directory
+        if (dir !== '.') {
+            message += `\n📁 ${dir}/\n`;
+            entriesShown++;
+        }
+
+        // Show files in directory
+        for (const file of dirFiles) {
+            if (entriesShown >= MAX_ENTRIES) break;
+
+            const fileName = file.path.includes('/') ? file.path.substring(file.path.lastIndexOf('/') + 1) : file.path;
+            const icon = file.type === 'dir' ? '📁' : '📄';
+            const indexed = file.indexed ? ' ✓' : '';
+            message += `  ${icon} ${fileName} (${file.type})${indexed}\n`;
+            entriesShown++;
+        }
     }
 
     return {
