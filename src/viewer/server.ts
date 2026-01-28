@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from 'fs';
 import chokidar, { FSWatcher } from 'chokidar';
 import { openDatabase, createQueries } from '../db/index.js';
 import { update as updateIndex } from '../commands/update.js';
+import { getGitStatus, GitStatusInfo, GitFileStatus } from './git-status.js';
 import type Database from 'better-sqlite3';
 
 const PORT = 3333;
@@ -44,6 +45,7 @@ interface TreeNode {
         types: number;
     };
     status?: 'modified' | 'new' | 'unchanged';  // Session change status
+    gitStatus?: GitFileStatus;  // Git status for cat icon coloring
 }
 
 interface SessionChangeInfo {
@@ -72,6 +74,16 @@ export async function startViewer(projectPath: string): Promise<string> {
     };
 
     console.error('[Viewer] Session changes from DB:', viewerSessionChanges.modified.size, 'modified,', viewerSessionChanges.new.size, 'new');
+
+    // Git status - fetch once at startup, refresh on file changes
+    let cachedGitInfo: GitStatusInfo | undefined;
+    const refreshGitStatus = async () => {
+        cachedGitInfo = await getGitStatus(projectPath);
+        console.error('[Viewer] Git status:', cachedGitInfo.isGitRepo ? 'repo' : 'no-repo',
+            cachedGitInfo.hasRemote ? 'with-remote' : 'no-remote',
+            cachedGitInfo.fileStatuses.size, 'files with status');
+    };
+    await refreshGitStatus();
 
     const app = express();
     server = createServer(app);
@@ -103,10 +115,13 @@ export async function startViewer(projectPath: string): Promise<string> {
             pendingChanges.clear();
         }
 
+        // Refresh git status on file changes
+        await refreshGitStatus();
+
         // Build fresh trees for both modes using viewer session tracking
         const freshDb = openDatabase(dbPath, true);
-        const codeTree = await buildTree(freshDb.getDb(), projectPath, 'code', viewerSessionChanges);
-        const allTree = await buildTree(freshDb.getDb(), projectPath, 'all', viewerSessionChanges);
+        const codeTree = await buildTree(freshDb.getDb(), projectPath, 'code', viewerSessionChanges, cachedGitInfo);
+        const allTree = await buildTree(freshDb.getDb(), projectPath, 'all', viewerSessionChanges, cachedGitInfo);
         freshDb.close();
 
         // Broadcast to all connected clients
@@ -181,7 +196,7 @@ export async function startViewer(projectPath: string): Promise<string> {
 
                 if (msg.type === 'getTree') {
                     const mode = msg.mode || 'code';
-                    const tree = await buildTree(sqlite, projectPath, mode, viewerSessionChanges);
+                    const tree = await buildTree(sqlite, projectPath, mode, viewerSessionChanges, cachedGitInfo);
                     ws.send(JSON.stringify({ type: 'tree', mode, data: tree }));
                 }
                 else if (msg.type === 'getSignature' && msg.file) {
@@ -203,7 +218,7 @@ export async function startViewer(projectPath: string): Promise<string> {
         });
 
         // Send initial tree (code files only)
-        buildTree(sqlite, projectPath, 'code', viewerSessionChanges).then(tree => {
+        buildTree(sqlite, projectPath, 'code', viewerSessionChanges, cachedGitInfo).then(tree => {
             ws.send(JSON.stringify({ type: 'tree', mode: 'code', data: tree }));
         });
     });
@@ -272,7 +287,7 @@ function detectSessionChanges(db: Database.Database): SessionChangeInfo {
     try {
         // Get session start time from metadata
         const sessionStartRow = db.prepare(
-            `SELECT value FROM metadata WHERE key = 'last_session_start'`
+            `SELECT value FROM metadata WHERE key = 'current_session_start'`
         ).get() as { value: string } | undefined;
 
         if (!sessionStartRow) {
@@ -308,7 +323,8 @@ async function buildTree(
     db: Database.Database,
     projectPath: string,
     mode: 'code' | 'all',
-    sessionChanges: SessionChangeInfo
+    sessionChanges: SessionChangeInfo,
+    gitInfo?: GitStatusInfo
 ): Promise<TreeNode> {
     let files: Array<{ path: string; items: number; methods: number; types: number; fileType?: string }>;
 
@@ -383,7 +399,8 @@ async function buildTree(
                     fileType: isFile ? file.fileType : undefined,
                     children: isFile ? undefined : [],
                     stats: isFile ? { items: file.items, methods: file.methods, types: file.types } : undefined,
-                    status: isFile ? getFileStatus(file.path, sessionChanges) : undefined
+                    status: isFile ? getFileStatus(file.path, sessionChanges) : undefined,
+                    gitStatus: isFile && gitInfo?.isGitRepo ? getGitFileStatus(file.path, gitInfo) : undefined
                 };
                 current.children?.push(child);
             }
@@ -401,6 +418,13 @@ function getFileStatus(filePath: string, changes: SessionChangeInfo): 'modified'
     if (changes.modified.has(filePath)) return 'modified';
     if (changes.new.has(filePath)) return 'new';
     return 'unchanged';
+}
+
+function getGitFileStatus(filePath: string, gitInfo: GitStatusInfo): GitFileStatus {
+    const status = gitInfo.fileStatuses.get(filePath);
+    if (status) return status;
+    // File is tracked and clean - show as pushed (green) if remote exists, otherwise committed (blue)
+    return gitInfo.hasRemote ? 'pushed' : 'committed';
 }
 
 function sortTree(node: TreeNode) {
@@ -684,6 +708,26 @@ function getViewerHTML(projectPath: string): string {
             color: var(--accent-green);
             opacity: 0.7;
         }
+
+        /* Git status cat icon */
+        .tree-node .git-cat {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tree-node .git-cat svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .tree-node .git-cat.untracked svg { fill: #6b7280; }
+        .tree-node .git-cat.modified svg { fill: #f59e0b; }
+        .tree-node .git-cat.committed svg { fill: #3b82f6; }
+        .tree-node .git-cat.pushed svg { fill: #22c55e; }
 
         .tree-node .icon {
             width: 18px;
@@ -974,6 +1018,22 @@ function getViewerHTML(projectPath: string): string {
                 statusIcon.title = 'Unchanged';
             }
             div.appendChild(statusIcon);
+
+            // Git status cat icon (only for files in git repos)
+            if (node.gitStatus) {
+                const gitCat = document.createElement('span');
+                gitCat.className = 'git-cat ' + node.gitStatus;
+                // Cat silhouette SVG - simple sitting cat with raised paw
+                gitCat.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12,8L10.67,8.09C9.81,7.07 7.4,4.5 5,4.5C5,4.5 3.03,7.46 4.96,11.41C4.41,12.24 4.07,12.67 4,13.66L2.07,13.95L2.28,14.93L4.04,14.67L4.18,15.38L2.61,16.32L3.08,17.21L4.53,16.32C5.68,18.76 8.59,20 12,20C15.41,20 18.32,18.76 19.47,16.32L20.92,17.21L21.39,16.32L19.82,15.38L19.96,14.67L21.72,14.93L21.93,13.95L20,13.66C19.93,12.67 19.59,12.24 19.04,11.41C20.97,7.46 19,4.5 19,4.5C16.6,4.5 14.19,7.07 13.33,8.09L12,8M9,11A1,1 0 0,1 10,12A1,1 0 0,1 9,13A1,1 0 0,1 8,12A1,1 0 0,1 9,11M15,11A1,1 0 0,1 16,12A1,1 0 0,1 15,13A1,1 0 0,1 14,12A1,1 0 0,1 15,11M11,14H13V16H11V14Z"/></svg>';
+                const gitTitles = {
+                    'untracked': 'Untracked - not in git',
+                    'modified': 'Modified - not committed',
+                    'committed': 'Committed - not pushed',
+                    'pushed': 'Pushed - in sync with remote'
+                };
+                gitCat.title = gitTitles[node.gitStatus] || node.gitStatus;
+                div.appendChild(gitCat);
+            }
 
             // File/folder icon
             const icon = document.createElement('span');
