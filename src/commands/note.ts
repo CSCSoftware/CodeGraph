@@ -3,7 +3,7 @@
  *
  * Stores a single text note in the project's CodeGraph database that persists
  * between sessions. Useful for:
- * - Reminders for the next session ("Test glob pattern fix!");
+ * - Reminders for the next session ("Test glob pattern fix!")
  * - User requests ("Remember to refactor X")
  * - Auto-generated notes before session end
  *

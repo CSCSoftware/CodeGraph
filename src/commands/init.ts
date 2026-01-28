@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, basename, extname } from 'path';
 import { glob } from 'glob';
 import { createHash } from 'crypto';
+import { minimatch } from 'minimatch';
 
 import { createDatabase, createQueries, type CodeGraphDatabase, type Queries } from '../db/index.js';
 import { extract, getSupportedExtensions } from '../parser/index.js';
@@ -27,6 +28,7 @@ export interface InitResult {
     codegraphPath: string;
     filesIndexed: number;
     filesSkipped: number;  // Unchanged files
+    filesRemoved: number;  // Files removed due to exclude patterns
     itemsFound: number;
     methodsFound: number;
     typesFound: number;
@@ -43,9 +45,11 @@ const DEFAULT_EXCLUDE = [
     '**/node_modules/**',
     '**/packages/**',
     '**/vendor/**',          // PHP Composer, Go
+    '**/vendor/bundle/**',   // Ruby Bundler
     // Build output
     '**/bin/**',
     '**/obj/**',
+    '**/bld/**',             // Alternative build folder
     '**/build/**',
     '**/dist/**',
     '**/out/**',             // VS Code, some TS configs
@@ -54,13 +58,23 @@ const DEFAULT_EXCLUDE = [
     '**/Release/**',         // Visual Studio
     '**/x64/**',             // Visual Studio
     '**/x86/**',             // Visual Studio
+    '**/[Aa][Rr][Mm]/**',    // Visual Studio ARM
+    '**/[Aa][Rr][Mm]64/**',  // Visual Studio ARM64
     '**/__pycache__/**',     // Python
     '**/.pyc',               // Python bytecode
+    '**/venv/**',            // Python virtual env
+    '**/.venv/**',           // Python virtual env
+    '**/env/**',             // Python virtual env
+    '**/*.egg-info/**',      // Python package metadata
     // IDE/Editor
     '**/.git/**',
     '**/.vs/**',
     '**/.idea/**',
     '**/.vscode/**',
+    // Framework-specific
+    '**/.next/**',           // Next.js
+    '**/coverage/**',        // Test coverage
+    '**/tmp/**',             // Ruby, temp files
     // Generated files
     '**/*.min.js',
     '**/*.generated.*',
@@ -157,6 +171,7 @@ export async function init(params: InitParams): Promise<InitResult> {
             codegraphPath: '',
             filesIndexed: 0,
             filesSkipped: 0,
+            filesRemoved: 0,
             itemsFound: 0,
             methodsFound: 0,
             typesFound: 0,
@@ -172,6 +187,7 @@ export async function init(params: InitParams): Promise<InitResult> {
             codegraphPath: '',
             filesIndexed: 0,
             filesSkipped: 0,
+            filesRemoved: 0,
             itemsFound: 0,
             methodsFound: 0,
             typesFound: 0,
@@ -252,6 +268,34 @@ export async function init(params: InitParams): Promise<InitResult> {
     queries.deleteUnusedItems();
 
     // --------------------------------------------------------
+    // Cleanup: Remove files that are now excluded
+    // (e.g., build/ was indexed before exclude pattern was added)
+    // --------------------------------------------------------
+    let filesRemoved = 0;
+    const existingFiles = queries.getAllFiles();
+
+    db.transaction(() => {
+        for (const file of existingFiles) {
+            // Check if this file path matches any exclude pattern
+            const shouldExclude = exclude.some(pattern =>
+                minimatch(file.path, pattern, { dot: true })
+            );
+
+            if (shouldExclude) {
+                // Remove from index
+                queries.clearFileData(file.id);
+                queries.deleteFile(file.id);
+                filesRemoved++;
+            }
+        }
+    });
+
+    if (filesRemoved > 0) {
+        // Cleanup items that are now orphaned
+        queries.deleteUnusedItems();
+    }
+
+    // --------------------------------------------------------
     // Scan project structure (all files, not just code)
     // --------------------------------------------------------
     const indexedFilesSet = new Set(files);  // Code files we indexed
@@ -304,6 +348,7 @@ export async function init(params: InitParams): Promise<InitResult> {
         codegraphPath: codegraphDir,
         filesIndexed,
         filesSkipped,
+        filesRemoved,
         itemsFound: totalItems,
         methodsFound: totalMethods,
         typesFound: totalTypes,

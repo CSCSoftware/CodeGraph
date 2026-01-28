@@ -85,6 +85,7 @@ The index lives in `.codegraph/index.db` (SQLite) - fast, portable, no external 
 - **Time-based Filtering**: Find what changed in the last hour, day, or week
 - **Project Structure**: Query all files (code, config, docs, assets) without filesystem access
 - **Session Notes**: Leave reminders for the next session - persists in the database
+- **Auto-Cleanup**: Excluded files (e.g., build outputs) are automatically removed from index
 
 ## Supported Languages
 
@@ -253,6 +254,7 @@ Opens `http://localhost:3333` with:
 - **Interactive file tree** - Click to expand directories
 - **File signatures** - Click any file to see its types and methods
 - **Live reload** - Changes detected automatically while you code
+- **Git status icons** - See which files are modified, staged, or untracked
 
 Close with `codegraph_viewer({ path: ".", action: "close" })`
 

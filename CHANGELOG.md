@@ -2,6 +2,21 @@
 
 All notable changes to CodeGraph will be documented in this file.
 
+## [1.3.1] - 2026-01-28
+
+### Added
+- **Automatic Cleanup**: `codegraph_init` now removes files that became excluded (e.g., build outputs)
+  - Reports `filesRemoved` count in result
+  - Uses minimatch for proper glob pattern matching
+- **Git Status in Viewer**: File tree now shows git status with cat icons
+  - 🟢 Pushed (committed and up-to-date)
+  - 🟡 Modified (uncommitted changes)
+  - 🔵 Staged (added to index)
+  - ⚪ Untracked (new files)
+
+### Changed
+- Added minimatch dependency for exclude pattern handling
+
 ## [1.3.0] - 2026-01-27
 
 ### Added

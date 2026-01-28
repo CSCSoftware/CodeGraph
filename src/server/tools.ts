@@ -510,6 +510,9 @@ async function handleInit(args: Record<string, unknown>): Promise<{ content: Arr
             message += ` (${result.filesSkipped} unchanged, skipped)`;
         }
         message += `\n`;
+        if (result.filesRemoved > 0) {
+            message += `Files removed: ${result.filesRemoved} (now excluded)\n`;
+        }
         message += `Items found: ${result.itemsFound}\n`;
         message += `Methods found: ${result.methodsFound}\n`;
         message += `Types found: ${result.typesFound}\n`;

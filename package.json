@@ -28,6 +28,8 @@
     "express": "^4.22.1",
     "glob": "^10.0.0",
     "highlight.js": "^11.11.0",
+    "minimatch": "^10.1.1",
+    "simple-git": "^3.27.0",
     "tree-sitter": "^0.21.0",
     "tree-sitter-c": "^0.21.0",
     "tree-sitter-c-sharp": "^0.21.0",

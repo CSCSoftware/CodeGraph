@@ -2,7 +2,7 @@
 
 MCP Server für persistentes Code-Indexing. Ermöglicht Claude Code schnelle, präzise Suchen statt Grep/Glob.
 
-**Version:** 1.3.0 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/CodeGraph
+**Version:** 1.3.1 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/CodeGraph
 
 ## Build & Run
 
@@ -126,6 +126,11 @@ codegraph_viewer({ path: ".", action: "close" })
 - Signaturen anzeigen
 - Live-Reload (chokidar)
 - Syntax-Highlighting
+- Git-Status mit Katzen-Icons (v1.3.1)
+
+### Auto-Cleanup (v1.3.1)
+`codegraph_init` entfernt automatisch Dateien die jetzt excluded sind (z.B. build/).
+Zeigt "Files removed: N" im Ergebnis.
 
 ## CLI
 
