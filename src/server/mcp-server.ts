@@ -1,5 +1,5 @@
 /**
- * MCP Server implementation for CodeGraph
+ * MCP Server implementation for AiDex
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -9,11 +9,12 @@ import {
     ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { registerTools, handleToolCall } from './tools.js';
+import { PRODUCT_NAME, PRODUCT_NAME_LOWER } from '../constants.js';
 
 export function createServer() {
     const server = new Server(
         {
-            name: 'codegraph',
+            name: PRODUCT_NAME_LOWER,
             version: '1.3.0',
         },
         {
@@ -39,7 +40,7 @@ export function createServer() {
         async start() {
             const transport = new StdioServerTransport();
             await server.connect(transport);
-            console.error('CodeGraph MCP server started');
+            console.error(`${PRODUCT_NAME} MCP server started`);
         },
     };
 }

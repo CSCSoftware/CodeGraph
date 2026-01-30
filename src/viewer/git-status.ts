@@ -1,5 +1,5 @@
 /**
- * Git status utilities for CodeGraph Viewer
+ * Git status utilities for AiDex Viewer
  *
  * Provides git status per file to show colored cat icons:
  * - untracked (gray): Git doesn't know about file

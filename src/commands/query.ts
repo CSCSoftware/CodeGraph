@@ -1,9 +1,10 @@
 /**
- * codegraph_query command - Search for terms in the index
+ * query command - Search for terms in the index
  */
 
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase, createQueries, type Queries } from '../db/index.js';
 
 // ============================================================
@@ -49,7 +50,7 @@ export function query(params: QueryParams): QueryResult {
     const limit = params.limit ?? 100;
 
     // Validate project path
-    const dbPath = join(params.path, '.codegraph', 'index.db');
+    const dbPath = join(params.path, INDEX_DIR, 'index.db');
     if (!existsSync(dbPath)) {
         return {
             success: false,
@@ -58,7 +59,7 @@ export function query(params: QueryParams): QueryResult {
             matches: [],
             totalMatches: 0,
             truncated: false,
-            error: `No CodeGraph index found at ${params.path}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${params.path}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 

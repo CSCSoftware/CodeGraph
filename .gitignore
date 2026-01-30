@@ -22,8 +22,9 @@ npm-debug.log*
 # Test coverage
 coverage/
 
-# Local CodeGraph databases (for testing)
+# Local AiDex databases (for testing)
 .codegraph/
+.aidex/
 
 # Generated HTML documentation
 *.html

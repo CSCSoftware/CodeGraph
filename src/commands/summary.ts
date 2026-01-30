@@ -1,5 +1,5 @@
 /**
- * codegraph_summary and codegraph_tree commands
+ * summary and tree commands
  *
  * - summary: Get project summary with auto-detected info
  * - tree: Get indexed file tree with optional stats
@@ -7,6 +7,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
+import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
 import { openDatabase, createQueries } from '../db/index.js';
 
@@ -66,8 +67,8 @@ export function summary(params: SummaryParams): SummaryResult {
     const { path: projectPath } = params;
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
@@ -80,7 +81,7 @@ export function summary(params: SummaryParams): SummaryResult {
                 fileCount: 0,
                 languages: [],
             },
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
@@ -92,7 +93,7 @@ export function summary(params: SummaryParams): SummaryResult {
         const projectName = db.getMetadata('project_name') ?? basename(projectPath);
 
         // Read summary.md if exists
-        const summaryPath = join(codegraphDir, 'summary.md');
+        const summaryPath = join(indexDir, 'summary.md');
         let content = '';
         if (existsSync(summaryPath)) {
             content = readFileSync(summaryPath, 'utf-8');
@@ -230,8 +231,8 @@ export function tree(params: TreeParams): TreeResult {
     const { path: projectPath, subpath, depth, includeStats } = params;
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
@@ -239,7 +240,7 @@ export function tree(params: TreeParams): TreeResult {
             root: '',
             entries: [],
             totalFiles: 0,
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
@@ -366,18 +367,18 @@ export function describe(params: DescribeParams): DescribeResult {
     const { path: projectPath, section, content, replace = false } = params;
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
             success: false,
             section,
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
-    const summaryPath = join(codegraphDir, 'summary.md');
+    const summaryPath = join(indexDir, 'summary.md');
 
     try {
         // Read existing summary or create new

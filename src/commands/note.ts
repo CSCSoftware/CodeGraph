@@ -1,7 +1,7 @@
 /**
- * codegraph_note command - Session notes for cross-session communication
+ * note command - Session notes for cross-session communication
  *
- * Stores a single text note in the project's CodeGraph database that persists
+ * Stores a single text note in the project's AiDex database that persists
  * between sessions. Useful for:
  * - Reminders for the next session ("Test glob pattern fix!")
  * - User requests ("Remember to refactor X")
@@ -12,6 +12,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase } from '../db/index.js';
 
 // ============================================================
@@ -46,14 +47,14 @@ export function note(params: NoteParams): NoteResult {
     const { path: projectPath, note: newNote, append, clear } = params;
 
     // Validate project path
-    const dbPath = join(projectPath, '.codegraph', 'index.db');
+    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
             success: false,
             note: null,
             action: 'read',
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
@@ -121,7 +122,7 @@ export function note(params: NoteParams): NoteResult {
  * Get note for a project (used internally by other tools to include in output)
  */
 export function getSessionNote(projectPath: string): string | null {
-    const dbPath = join(projectPath, '.codegraph', 'index.db');
+    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
 
     if (!existsSync(dbPath)) {
         return null;

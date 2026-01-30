@@ -1,5 +1,5 @@
 /**
- * PHP language configuration for CodeGraph
+ * PHP language configuration for AiDex
  */
 
 /**

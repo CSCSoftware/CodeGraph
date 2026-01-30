@@ -1,9 +1,9 @@
 /**
- * Prepared statements and query helpers for CodeGraph
+ * Prepared statements and query helpers for AiDex
  */
 
 import type Database from 'better-sqlite3';
-import type { CodeGraphDatabase } from './database.js';
+import type { AiDexDatabase } from './database.js';
 
 // ============================================================
 // Type definitions
@@ -117,7 +117,7 @@ export class Queries {
     private _getTypesByFile?: Database.Statement;
     private _deleteTypesByFile?: Database.Statement;
 
-    constructor(database: CodeGraphDatabase) {
+    constructor(database: AiDexDatabase) {
         this.db = database.getDb();
     }
 
@@ -475,6 +475,6 @@ export class Queries {
 /**
  * Create a Queries instance for the given database
  */
-export function createQueries(database: CodeGraphDatabase): Queries {
+export function createQueries(database: AiDexDatabase): Queries {
     return new Queries(database);
 }

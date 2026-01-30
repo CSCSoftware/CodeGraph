@@ -1,5 +1,5 @@
 /**
- * Go language configuration for CodeGraph
+ * Go language configuration for AiDex
  */
 
 /**

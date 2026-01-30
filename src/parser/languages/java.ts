@@ -1,5 +1,5 @@
 /**
- * Java language configuration for CodeGraph
+ * Java language configuration for AiDex
  */
 
 /**

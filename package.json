@@ -1,6 +1,6 @@
 {
-  "name": "codegraph",
-  "version": "1.3.0",
+  "name": "aidex",
+  "version": "1.4.0",
   "description": "MCP Server providing persistent code indexing for Claude Code",
   "main": "build/index.js",
   "type": "module",
@@ -16,6 +16,8 @@
   "keywords": [
     "mcp",
     "claude",
+    "ai",
+    "aidex",
     "code-indexing",
     "tree-sitter"
   ],

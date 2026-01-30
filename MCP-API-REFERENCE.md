@@ -1,42 +1,42 @@
-# CodeGraph MCP API Reference
+# AiDex MCP API Reference
 
-Complete reference for all CodeGraph MCP tools.
+Complete reference for all AiDex MCP tools.
 
 ---
 
 ## Table of Contents
 
 - [Indexing](#indexing)
-  - [codegraph_init](#codegraph_init)
-  - [codegraph_update](#codegraph_update)
-  - [codegraph_remove](#codegraph_remove)
+  - [aidex_init](#aidex_init)
+  - [aidex_update](#aidex_update)
+  - [aidex_remove](#aidex_remove)
 - [Querying](#querying)
-  - [codegraph_query](#codegraph_query)
-  - [codegraph_signature](#codegraph_signature)
-  - [codegraph_signatures](#codegraph_signatures)
+  - [aidex_query](#aidex_query)
+  - [aidex_signature](#aidex_signature)
+  - [aidex_signatures](#aidex_signatures)
 - [Project Info](#project-info)
-  - [codegraph_status](#codegraph_status)
-  - [codegraph_summary](#codegraph_summary)
-  - [codegraph_tree](#codegraph_tree)
-  - [codegraph_files](#codegraph_files)
-  - [codegraph_describe](#codegraph_describe)
+  - [aidex_status](#aidex_status)
+  - [aidex_summary](#aidex_summary)
+  - [aidex_tree](#aidex_tree)
+  - [aidex_files](#aidex_files)
+  - [aidex_describe](#aidex_describe)
 - [Cross-Project](#cross-project)
-  - [codegraph_link](#codegraph_link)
-  - [codegraph_unlink](#codegraph_unlink)
-  - [codegraph_links](#codegraph_links)
-  - [codegraph_scan](#codegraph_scan)
+  - [aidex_link](#aidex_link)
+  - [aidex_unlink](#aidex_unlink)
+  - [aidex_links](#aidex_links)
+  - [aidex_scan](#aidex_scan)
 - [Session Management](#session-management)
-  - [codegraph_session](#codegraph_session)
-  - [codegraph_note](#codegraph_note)
-  - [codegraph_viewer](#codegraph_viewer)
+  - [aidex_session](#aidex_session)
+  - [aidex_note](#aidex_note)
+  - [aidex_viewer](#aidex_viewer)
 
 ---
 
 ## Indexing
 
-### codegraph_init
+### aidex_init
 
-Initialize or re-index a project. Creates `.codegraph/` directory with SQLite database.
+Initialize or re-index a project. Creates `.aidex/` directory with SQLite database.
 
 **Parameters:**
 
@@ -62,7 +62,7 @@ Initialize or re-index a project. Creates `.codegraph/` directory with SQLite da
 
 ---
 
-### codegraph_update
+### aidex_update
 
 Re-index a single file after editing. Detects unchanged files via hash comparison.
 
@@ -70,7 +70,7 @@ Re-index a single file after editing. Detects unchanged files via hash compariso
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `file` | string | ✅ | Relative path to file within project |
 
 **Returns:**
@@ -89,7 +89,7 @@ Re-index a single file after editing. Detects unchanged files via hash compariso
 
 ---
 
-### codegraph_remove
+### aidex_remove
 
 Remove a deleted file from the index.
 
@@ -97,7 +97,7 @@ Remove a deleted file from the index.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `file` | string | ✅ | Relative path to file to remove |
 
 **Returns:**
@@ -116,7 +116,7 @@ Remove a deleted file from the index.
 
 ## Querying
 
-### codegraph_query
+### aidex_query
 
 Search for terms/identifiers in the index. **Primary search tool** - use instead of grep/glob.
 
@@ -124,7 +124,7 @@ Search for terms/identifiers in the index. **Primary search tool** - use instead
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `term` | string | ✅ | The term to search for |
 | `mode` | string | - | Search mode: `exact` (default), `contains`, `starts_with` |
 | `file_filter` | string | - | Glob pattern to filter files (e.g., `"src/commands/**"`) |
@@ -159,7 +159,7 @@ Search for terms/identifiers in the index. **Primary search tool** - use instead
 
 ---
 
-### codegraph_signature
+### aidex_signature
 
 Get the signature of a single file: types, methods, header comments. **Use instead of reading entire files** when you only need structure.
 
@@ -167,7 +167,7 @@ Get the signature of a single file: types, methods, header comments. **Use inste
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `file` | string | ✅ | Relative path to file (e.g., `"src/Core/Engine.cs"`) |
 
 **Returns:**
@@ -202,7 +202,7 @@ Game engine core implementation
 
 ---
 
-### codegraph_signatures
+### aidex_signatures
 
 Get signatures for multiple files at once using glob pattern. Efficient for exploring codebase structure.
 
@@ -210,7 +210,7 @@ Get signatures for multiple files at once using glob pattern. Efficient for expl
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `pattern` | string | - | Glob pattern (e.g., `"src/**/*.cs"`, `"**/*.ts"`) |
 | `files` | string[] | - | Explicit list of file paths (alternative to pattern) |
 
@@ -236,7 +236,7 @@ Get signatures for multiple files at once using glob pattern. Efficient for expl
 
 ## Project Info
 
-### codegraph_status
+### aidex_status
 
 Get index statistics for a project.
 
@@ -259,7 +259,7 @@ Get index statistics for a project.
 
 ---
 
-### codegraph_summary
+### aidex_summary
 
 Get project overview including auto-detected entry points and main types.
 
@@ -267,7 +267,7 @@ Get project overview including auto-detected entry points and main types.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 
 **Returns:**
 - Project name
@@ -283,7 +283,7 @@ Get project overview including auto-detected entry points and main types.
 
 ---
 
-### codegraph_tree
+### aidex_tree
 
 Get file tree with optional statistics per file.
 
@@ -291,7 +291,7 @@ Get file tree with optional statistics per file.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `subpath` | string | - | Subdirectory to list (default: project root) |
 | `depth` | number | - | Maximum depth to traverse (default: unlimited) |
 | `include_stats` | boolean | - | Include item/method/type counts per file |
@@ -314,7 +314,7 @@ Get file tree with optional statistics per file.
 
 ---
 
-### codegraph_files
+### aidex_files
 
 List all project files by type. Includes non-code files (config, docs, assets). Supports time-based filtering to find recently changed files.
 
@@ -322,7 +322,7 @@ List all project files by type. Includes non-code files (config, docs, assets). 
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `type` | string | - | Filter by type: `dir`, `code`, `config`, `doc`, `asset`, `test`, `other` |
 | `pattern` | string | - | Glob pattern filter (e.g., `"**/*.md"`, `"src/**/*.ts"`) |
 | `modified_since` | string | - | Only files indexed after this time. Formats: `30m`, `2h`, `1d`, `1w`, or ISO date |
@@ -364,7 +364,7 @@ List all project files by type. Includes non-code files (config, docs, assets). 
 
 ---
 
-### codegraph_describe
+### aidex_describe
 
 Add or update sections in the project summary (`summary.md`).
 
@@ -372,7 +372,7 @@ Add or update sections in the project summary (`summary.md`).
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `section` | string | ✅ | Section to update: `purpose`, `architecture`, `concepts`, `patterns`, `notes` |
 | `content` | string | ✅ | Content to add |
 | `replace` | boolean | - | Replace existing content (default: append) |
@@ -391,7 +391,7 @@ Add or update sections in the project summary (`summary.md`).
 
 ## Cross-Project
 
-### codegraph_link
+### aidex_link
 
 Link another indexed project as a dependency. Enables cross-project queries.
 
@@ -400,7 +400,7 @@ Link another indexed project as a dependency. Enables cross-project queries.
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `path` | string | ✅ | Path to current project |
-| `dependency` | string | ✅ | Path to dependency project (must have `.codegraph`) |
+| `dependency` | string | ✅ | Path to dependency project (must have `.aidex`) |
 | `name` | string | - | Display name for the dependency |
 
 **Returns:**
@@ -418,7 +418,7 @@ Link another indexed project as a dependency. Enables cross-project queries.
 
 ---
 
-### codegraph_unlink
+### aidex_unlink
 
 Remove a linked dependency.
 
@@ -439,7 +439,7 @@ Remove a linked dependency.
 
 ---
 
-### codegraph_links
+### aidex_links
 
 List all linked dependencies.
 
@@ -447,7 +447,7 @@ List all linked dependencies.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 
 **Returns:**
 - List of linked projects with:
@@ -463,9 +463,9 @@ List all linked dependencies.
 
 ---
 
-### codegraph_scan
+### aidex_scan
 
-Find all projects with CodeGraph indexes in a directory tree.
+Find all projects with AiDex indexes in a directory tree.
 
 **Parameters:**
 
@@ -493,7 +493,7 @@ Find all projects with CodeGraph indexes in a directory tree.
 
 ## Session Management
 
-### codegraph_session
+### aidex_session
 
 Start or continue a session. **Call at the start of every new chat session!**
 
@@ -501,7 +501,7 @@ Start or continue a session. **Call at the start of every new chat session!**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 
 **What it does:**
 
@@ -533,7 +533,7 @@ Start or continue a session. **Call at the start of every new chat session!**
 - **Duration:** 2h 30m
 
 💡 Query last session changes with:
-`codegraph_query({ term: "...", modified_since: "1706349600000", modified_before: "1706358600000" })`
+`aidex_query({ term: "...", modified_since: "1706349600000", modified_before: "1706358600000" })`
 
 ## External Changes Detected
 Found 3 file(s) changed outside of session:
@@ -550,7 +550,7 @@ Test the new feature after restart
 
 ---
 
-### codegraph_note
+### aidex_note
 
 Read or write session notes. Persists in the database between sessions.
 
@@ -558,7 +558,7 @@ Read or write session notes. Persists in the database between sessions.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `note` | string | - | Note to save. If omitted, reads current note |
 | `append` | boolean | - | Append to existing note instead of replacing (default: false) |
 | `clear` | boolean | - | Clear the note (default: false) |
@@ -589,7 +589,7 @@ Read or write session notes. Persists in the database between sessions.
 
 ---
 
-### codegraph_viewer
+### aidex_viewer
 
 Open an interactive project tree viewer in the browser. Provides visual exploration with live updates.
 
@@ -597,7 +597,7 @@ Open an interactive project tree viewer in the browser. Provides visual explorat
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `path` | string | ✅ | Path to project with `.codegraph` directory |
+| `path` | string | ✅ | Path to project with `.aidex` directory |
 | `action` | string | - | `open` (default) or `close` |
 
 **Features:**
@@ -629,7 +629,7 @@ Open an interactive project tree viewer in the browser. Provides visual explorat
 
 ## Time Format Reference
 
-Used by `codegraph_query` parameters `modified_since` and `modified_before`:
+Used by `aidex_query` parameters `modified_since` and `modified_before`:
 
 | Format | Example | Meaning |
 |--------|---------|---------|
@@ -663,7 +663,7 @@ Used by `codegraph_query` parameters `modified_since` and `modified_before`:
 
 ## Database Schema
 
-SQLite database at `.codegraph/index.db`:
+SQLite database at `.aidex/index.db`:
 
 | Table | Purpose |
 |-------|---------|
@@ -682,9 +682,9 @@ SQLite database at `.codegraph/index.db`:
 
 ## Best Practices
 
-1. **Start sessions with `codegraph_session`** - Detects external changes automatically
-2. **Use `codegraph_query` instead of grep** - 50x less tokens, precise results
-3. **Use `codegraph_signature` instead of reading files** - Get structure without implementation
+1. **Start sessions with `aidex_session`** - Detects external changes automatically
+2. **Use `aidex_query` instead of grep** - 50x less tokens, precise results
+3. **Use `aidex_signature` instead of reading files** - Get structure without implementation
 4. **Leave session notes** - Context persists between chat sessions
-5. **Re-index after edits** - Call `codegraph_update` for modified files
+5. **Re-index after edits** - Call `aidex_update` for modified files
 6. **Link related projects** - Query across multiple codebases

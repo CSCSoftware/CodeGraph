@@ -1,9 +1,10 @@
 /**
- * codegraph_scan command - Find all .codegraph directories!
+ * scan command - Find all AiDex index directories!
  */
 
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
+import { INDEX_DIR } from '../constants.js';
 import { openDatabase } from '../db/index.js';
 
 // ============================================================
@@ -84,9 +85,9 @@ export function scan(params: ScanParams): ScanResult {
 
         scannedDirs++;
 
-        // Check if this directory has .codegraph
-        const codegraphPath = join(dirPath, '.codegraph');
-        const dbPath = join(codegraphPath, 'index.db');
+        // Check if this directory has an index dir
+        const indexPath = join(dirPath, INDEX_DIR);
+        const dbPath = join(indexPath, 'index.db');
 
         if (existsSync(dbPath)) {
             try {
@@ -116,7 +117,7 @@ export function scan(params: ScanParams): ScanResult {
 
             for (const entry of entries) {
                 if (!entry.isDirectory()) continue;
-                if (entry.name.startsWith('.') && entry.name !== '.codegraph') continue;
+                if (entry.name.startsWith('.') && entry.name !== INDEX_DIR) continue;
                 if (EXCLUDED_DIRS.has(entry.name)) continue;
 
                 const subPath = join(dirPath, entry.name);

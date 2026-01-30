@@ -1,5 +1,5 @@
 -- ============================================================
--- CodeGraph SQLite Schema
+-- AiDex SQLite Schema
 -- Version: 1.0
 -- ============================================================
 
@@ -104,7 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_types_file ON types(file_id);
 CREATE INDEX IF NOT EXISTS idx_types_name ON types(name);
 
 -- ------------------------------------------------------------
--- Abhängigkeiten zu anderen CodeGraph-Instanzen
+-- Abhängigkeiten zu anderen AiDex-Instanzen
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS dependencies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
