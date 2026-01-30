@@ -1,4 +1,4 @@
-# CodeGraph
+# AiDex
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](https://nodejs.org/)
@@ -6,9 +6,9 @@
 
 **Stop wasting 80% of your AI's context window on code searches.**
 
-CodeGraph is an MCP server that gives AI coding assistants instant access to your entire codebase through a persistent, pre-built index. Works with any MCP-compatible AI assistant: Claude Code, Cursor, Windsurf, Continue.dev, and more.
+AiDex is an MCP server that gives AI coding assistants instant access to your entire codebase through a persistent, pre-built index. Works with any MCP-compatible AI assistant: Claude Code, Cursor, Windsurf, Continue.dev, and more.
 
-<!-- TODO: Add demo GIF showing codegraph_query vs grep -->
+<!-- TODO: Add demo GIF showing aidex_query vs grep -->
 
 ## The Problem
 
@@ -30,7 +30,7 @@ AI: read File1.cs, File2.cs, File3.cs...
 → 2000+ tokens consumed, 5+ tool calls
 
 # After: precise results, minimal context
-AI: codegraph_query({ term: "PlayerHealth" })
+AI: aidex_query({ term: "PlayerHealth" })
 → Engine.cs:45, Player.cs:23, UI.cs:156
 → ~50 tokens, 1 tool call
 ```
@@ -39,7 +39,7 @@ AI: codegraph_query({ term: "PlayerHealth" })
 
 ## Why Not Just Grep?
 
-| | Grep/Ripgrep | CodeGraph |
+| | Grep/Ripgrep | AiDex |
 |---|---|---|
 | **Context usage** | 2000+ tokens per search | ~50 tokens |
 | **Results** | All text matches | Only identifiers |
@@ -49,31 +49,31 @@ AI: codegraph_query({ term: "PlayerHealth" })
 
 **The real cost of grep**: Every grep result includes surrounding context. Search for `User` in a large project and you'll get hundreds of hits - comments, strings, partial matches. Your AI reads through all of them, burning context tokens on noise.
 
-**CodeGraph indexes identifiers**: It uses Tree-sitter to actually parse your code. When you search for `User`, you get the class definition, the method parameters, the variable declarations - not every comment that mentions "user".
+**AiDex indexes identifiers**: It uses Tree-sitter to actually parse your code. When you search for `User`, you get the class definition, the method parameters, the variable declarations - not every comment that mentions "user".
 
 ## How It Works
 
 1. **Index your project once** (~1 second per 1000 files)
    ```
-   codegraph_init({ path: "/path/to/project" })
+   aidex_init({ path: "/path/to/project" })
    ```
 
 2. **AI searches the index instead of grepping**
    ```
-   codegraph_query({ term: "Calculate", mode: "starts_with" })
+   aidex_query({ term: "Calculate", mode: "starts_with" })
    → All functions starting with "Calculate" + exact line numbers
 
-   codegraph_query({ term: "Player", modified_since: "2h" })
+   aidex_query({ term: "Player", modified_since: "2h" })
    → Only matches changed in the last 2 hours
    ```
 
 3. **Get file overviews without reading entire files**
    ```
-   codegraph_signature({ file: "src/Engine.cs" })
+   aidex_signature({ file: "src/Engine.cs" })
    → All classes, methods, and their signatures
    ```
 
-The index lives in `.codegraph/index.db` (SQLite) - fast, portable, no external dependencies.
+The index lives in `.aidex/index.db` (SQLite) - fast, portable, no external dependencies.
 
 ## Features
 
@@ -108,21 +108,21 @@ The index lives in `.codegraph/index.db` (SQLite) - fast, portable, no external 
 ### 1. Install
 
 ```bash
-git clone https://github.com/CSCSoftware/CodeGraph.git
-cd CodeGraph
+git clone https://github.com/CSCSoftware/AiDex.git
+cd AiDex
 npm install && npm run build
 ```
 
 ### 2. Register with your AI assistant
 
-**For Claude Code CLI** (`~/.claude.json`):
+**For Claude Code** (`~/.claude/settings.json` or `~/.claude.json`):
 ```json
 {
   "mcpServers": {
-    "codegraph": {
+    "aidex": {
       "type": "stdio",
       "command": "node",
-      "args": ["/path/to/CodeGraph/build/index.js"],
+      "args": ["/path/to/AiDex/build/index.js"],
       "env": {}
     }
   }
@@ -133,13 +133,15 @@ npm install && npm run build
 ```json
 {
   "mcpServers": {
-    "codegraph": {
+    "aidex": {
       "command": "node",
-      "args": ["/path/to/CodeGraph/build/index.js"]
+      "args": ["/path/to/AiDex/build/index.js"]
     }
   }
 }
 ```
+
+> **Important:** The server name in your config determines the MCP tool prefix. Use `"aidex"` as shown above — this gives you tool names like `aidex_query`, `aidex_signature`, etc. Using a different name (e.g., `"codegraph"`) would change the prefix accordingly.
 
 **For other MCP clients**: See your client's documentation for MCP server configuration.
 
@@ -148,59 +150,59 @@ npm install && npm run build
 Add to your AI's instructions (e.g., `~/.claude/CLAUDE.md` for Claude Code):
 
 ```markdown
-## CodeGraph - Use for ALL code searches!
+## AiDex - Use for ALL code searches!
 
-**Before using Grep/Glob, check if `.codegraph/` exists in the project.**
+**Before using Grep/Glob, check if `.aidex/` exists in the project.**
 
-If yes, use CodeGraph instead:
-- `codegraph_query` - Find functions, classes, variables by name
-- `codegraph_signature` - Get all methods in a file with line numbers
-- `codegraph_signatures` - Get methods from multiple files (glob pattern)
-- `codegraph_summary` - Project overview with entry points
+If yes, use AiDex instead:
+- `aidex_query` - Find functions, classes, variables by name
+- `aidex_signature` - Get all methods in a file with line numbers
+- `aidex_signatures` - Get methods from multiple files (glob pattern)
+- `aidex_summary` - Project overview with entry points
 
-If no `.codegraph/` exists, offer to run `codegraph_init` first.
+If no `.aidex/` exists, offer to run `aidex_init` first.
 ```
 
 ### 4. Index your project
 
-Ask your AI: *"Index this project with CodeGraph"*
+Ask your AI: *"Index this project with AiDex"*
 
 Or manually in the AI chat:
 ```
-codegraph_init({ path: "/path/to/your/project" })
+aidex_init({ path: "/path/to/your/project" })
 ```
 
 ## Available Tools
 
 | Tool | Description |
 |------|-------------|
-| `codegraph_init` | Index a project (creates `.codegraph/`) |
-| `codegraph_query` | Search by term (exact/contains/starts_with) |
-| `codegraph_signature` | Get one file's classes + methods |
-| `codegraph_signatures` | Get signatures for multiple files (glob) |
-| `codegraph_update` | Re-index a single changed file |
-| `codegraph_remove` | Remove a deleted file from index |
-| `codegraph_summary` | Project overview |
-| `codegraph_tree` | File tree with statistics |
-| `codegraph_describe` | Add documentation to summary |
-| `codegraph_link` | Link another indexed project |
-| `codegraph_unlink` | Remove linked project |
-| `codegraph_links` | List linked projects |
-| `codegraph_status` | Index statistics |
-| `codegraph_scan` | Find indexed projects in directory tree |
-| `codegraph_files` | List project files by type (code/config/doc/asset) |
-| `codegraph_note` | Read/write session notes (persists between sessions) |
-| `codegraph_session` | Start session, detect external changes, auto-reindex |
-| `codegraph_viewer` | Open interactive project tree in browser |
+| `aidex_init` | Index a project (creates `.aidex/`) |
+| `aidex_query` | Search by term (exact/contains/starts_with) |
+| `aidex_signature` | Get one file's classes + methods |
+| `aidex_signatures` | Get signatures for multiple files (glob) |
+| `aidex_update` | Re-index a single changed file |
+| `aidex_remove` | Remove a deleted file from index |
+| `aidex_summary` | Project overview |
+| `aidex_tree` | File tree with statistics |
+| `aidex_describe` | Add documentation to summary |
+| `aidex_link` | Link another indexed project |
+| `aidex_unlink` | Remove linked project |
+| `aidex_links` | List linked projects |
+| `aidex_status` | Index statistics |
+| `aidex_scan` | Find indexed projects in directory tree |
+| `aidex_files` | List project files by type (code/config/doc/asset) |
+| `aidex_note` | Read/write session notes (persists between sessions) |
+| `aidex_session` | Start session, detect external changes, auto-reindex |
+| `aidex_viewer` | Open interactive project tree in browser |
 
 ## Time-based Filtering
 
 Track what changed recently with `modified_since` and `modified_before`:
 
 ```
-codegraph_query({ term: "render", modified_since: "2h" })   # Last 2 hours
-codegraph_query({ term: "User", modified_since: "1d" })     # Last day
-codegraph_query({ term: "API", modified_since: "1w" })      # Last week
+aidex_query({ term: "render", modified_since: "2h" })   # Last 2 hours
+aidex_query({ term: "User", modified_since: "1d" })     # Last day
+aidex_query({ term: "API", modified_since: "1w" })      # Last week
 ```
 
 Supported formats:
@@ -211,13 +213,13 @@ Perfect for questions like *"What did I change in the last hour?"*
 
 ## Project Structure
 
-CodeGraph indexes ALL files in your project (not just code), letting you query the structure:
+AiDex indexes ALL files in your project (not just code), letting you query the structure:
 
 ```
-codegraph_files({ path: ".", type: "config" })  # All config files
-codegraph_files({ path: ".", type: "test" })    # All test files
-codegraph_files({ path: ".", pattern: "**/*.md" })  # All markdown files
-codegraph_files({ path: ".", modified_since: "30m" })  # Changed this session
+aidex_files({ path: ".", type: "config" })  # All config files
+aidex_files({ path: ".", type: "test" })    # All test files
+aidex_files({ path: ".", pattern: "**/*.md" })  # All markdown files
+aidex_files({ path: ".", modified_since: "30m" })  # Changed this session
 ```
 
 File types: `code`, `config`, `doc`, `asset`, `test`, `other`, `dir`
@@ -229,10 +231,10 @@ Use `modified_since` to find files changed in this session - perfect for *"What 
 Leave reminders for the next session - no more losing context between chats:
 
 ```
-codegraph_note({ path: ".", note: "Test the glob fix after restart" })  # Write
-codegraph_note({ path: ".", note: "Also check edge cases", append: true })  # Append
-codegraph_note({ path: "." })                                              # Read
-codegraph_note({ path: ".", clear: true })                                 # Clear
+aidex_note({ path: ".", note: "Test the glob fix after restart" })  # Write
+aidex_note({ path: ".", note: "Also check edge cases", append: true })  # Append
+aidex_note({ path: "." })                                              # Read
+aidex_note({ path: ".", clear: true })                                 # Clear
 ```
 
 **Use cases:**
@@ -240,14 +242,14 @@ codegraph_note({ path: ".", clear: true })                                 # Cle
 - AI auto-reminder: Save what to verify after a restart
 - Handover notes: Context for the next session without editing config files
 
-Notes are stored in the SQLite database (`.codegraph/index.db`) and persist indefinitely.
+Notes are stored in the SQLite database (`.aidex/index.db`) and persist indefinitely.
 
 ## Interactive Viewer
 
 Explore your indexed project visually in the browser:
 
 ```
-codegraph_viewer({ path: "." })
+aidex_viewer({ path: "." })
 ```
 
 Opens `http://localhost:3333` with:
@@ -256,7 +258,7 @@ Opens `http://localhost:3333` with:
 - **Live reload** - Changes detected automatically while you code
 - **Git status icons** - See which files are modified, staged, or untracked
 
-Close with `codegraph_viewer({ path: ".", action: "close" })`
+Close with `aidex_viewer({ path: ".", action: "close" })`
 
 ## CLI Usage
 
@@ -269,7 +271,7 @@ node build/index.js init ./myproject  # Index a project from command line
 
 | Project | Files | Items | Index Time | Query Time |
 |---------|-------|-------|------------|------------|
-| Small (CodeGraph) | 19 | 1,200 | <1s | 1-5ms |
+| Small (AiDex) | 19 | 1,200 | <1s | 1-5ms |
 | Medium (RemoteDebug) | 10 | 1,900 | <1s | 1-5ms |
 | Large (LibPyramid3D) | 18 | 3,000 | <1s | 1-5ms |
 | XL (MeloTTS) | 56 | 4,100 | ~2s | 1-10ms |
@@ -283,11 +285,11 @@ node build/index.js init ./myproject  # Index a project from command line
 ## Project Structure
 
 ```
-.codegraph/              ← Created in YOUR project
+.aidex/                  ← Created in YOUR project
 ├── index.db             ← SQLite database
 └── summary.md           ← Optional documentation
 
-CodeGraph/               ← This repository
+AiDex/                   ← This repository
 ├── src/
 │   ├── commands/        ← Tool implementations
 │   ├── db/              ← SQLite wrapper

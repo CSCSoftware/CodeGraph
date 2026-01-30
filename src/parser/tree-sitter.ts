@@ -1,5 +1,5 @@
 /**
- * Tree-sitter parser integration for CodeGraph
+ * Tree-sitter parser integration for AiDex
  */
 
 import Parser from 'tree-sitter';

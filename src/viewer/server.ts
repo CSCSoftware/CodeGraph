@@ -1,5 +1,5 @@
 /**
- * CodeGraph Viewer - Local HTTP Server with WebSocket
+ * AiDex Viewer - Local HTTP Server with WebSocket
  * Opens an interactive project tree in the browser
  *
  * Features:
@@ -18,6 +18,7 @@ import chokidar, { FSWatcher } from 'chokidar';
 import { openDatabase, createQueries } from '../db/index.js';
 import { update as updateIndex } from '../commands/update.js';
 import { getGitStatus, GitStatusInfo, GitFileStatus } from './git-status.js';
+import { PRODUCT_NAME, INDEX_DIR } from '../constants.js';
 import type Database from 'better-sqlite3';
 
 const PORT = 3333;
@@ -59,7 +60,7 @@ export async function startViewer(projectPath: string): Promise<string> {
         return `Viewer already running at http://localhost:${PORT}`;
     }
 
-    const dbPath = path.join(projectPath, '.codegraph', 'index.db');
+    const dbPath = path.join(projectPath, INDEX_DIR, 'index.db');
     const db = openDatabase(dbPath, true); // readonly for queries
     const sqlite = db.getDb();
     const queries = createQueries(db);
@@ -139,7 +140,7 @@ export async function startViewer(projectPath: string): Promise<string> {
         ignored: [
             '**/node_modules/**',
             '**/.git/**',
-            '**/.codegraph/**',
+            `**/${INDEX_DIR}/**`,
             '**/build/**',
             '**/dist/**'
         ],
@@ -548,7 +549,7 @@ function getViewerHTML(projectPath: string): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CodeGraph Viewer - ${projectName}</title>
+    <title>${PRODUCT_NAME} Viewer - ${projectName}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.0/styles/tokyo-night-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.0/highlight.min.js"></script>
     <style>
@@ -880,7 +881,7 @@ function getViewerHTML(projectPath: string): string {
 </head>
 <body>
     <header>
-        <h1>CodeGraph Viewer</h1>
+        <h1>${PRODUCT_NAME} Viewer</h1>
         <span class="project-name">${projectName}</span>
     </header>
 
@@ -918,7 +919,7 @@ function getViewerHTML(projectPath: string): string {
         let cachedContent = null;
 
         ws.onopen = () => {
-            console.log('Connected to CodeGraph Viewer');
+            console.log('Connected to AiDex Viewer');
         };
 
         let cachedCodeTree = null;

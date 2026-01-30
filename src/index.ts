@@ -1,16 +1,17 @@
 /**
- * CodeGraph - MCP Server Entry Point
+ * AiDex - MCP Server Entry Point
  *
  * Provides persistent code indexing for Claude Code.
  *
  * Usage:
  *   node build/index.js              - Start MCP server (default)
- *   node build/index.js scan <path>  - Scan for .codegraph directories
+ *   node build/index.js scan <path>  - Scan for .aidex directories
  *   node build/index.js init <path>  - Index a project
  */
 
 import { createServer } from './server/mcp-server.js';
 import { scan, init } from './commands/index.js';
+import { PRODUCT_NAME, PRODUCT_NAME_LOWER } from './constants.js';
 
 async function main() {
     const args = process.argv.slice(2);
@@ -19,7 +20,7 @@ async function main() {
     if (args[0] === 'scan') {
         const searchPath = args[1];
         if (!searchPath) {
-            console.error('Usage: codegraph scan <path>');
+            console.error(`Usage: ${PRODUCT_NAME_LOWER} scan <path>`);
             process.exit(1);
         }
 
@@ -30,7 +31,7 @@ async function main() {
             process.exit(1);
         }
 
-        console.log(`\nCodeGraph Indexes Found: ${result.projects.length}`);
+        console.log(`\n${PRODUCT_NAME} Indexes Found: ${result.projects.length}`);
         console.log(`Scanned: ${result.scannedDirs} directories\n`);
 
         if (result.projects.length === 0) {
@@ -52,7 +53,7 @@ async function main() {
     if (args[0] === 'init') {
         const projectPath = args[1];
         if (!projectPath) {
-            console.error('Usage: codegraph init <path>');
+            console.error(`Usage: ${PRODUCT_NAME_LOWER} init <path>`);
             process.exit(1);
         }
 
@@ -80,6 +81,6 @@ async function main() {
 }
 
 main().catch((error) => {
-    console.error('Failed to start CodeGraph:', error);
+    console.error(`Failed to start ${PRODUCT_NAME}:`, error);
     process.exit(1);
 });

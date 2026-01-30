@@ -39,7 +39,19 @@
       "Bash(curl:*)",
       "Bash(ping:*)",
       "Bash(findstr:*)",
-      "Bash(netstat:*)"
+      "Bash(netstat:*)",
+      "Bash(cmd /c \"rmdir /s /q Q:\\\\develop\\\\Tools\\\\CodeGraph\\\\.codegraph\")",
+      "Bash(powershell -File:*)",
+      "mcp__aidex__aidex_note",
+      "mcp__aidex__aidex_scan",
+      "mcp__aidex__aidex_init",
+      "mcp__aidex__aidex_status",
+      "mcp__aidex__aidex_query",
+      "mcp__aidex__aidex_summary",
+      "Bash(powershell -NoProfile -Command:*)",
+      "Bash(cmd /c:*)",
+      "Bash(del \"codegraph-scan.bat\" \"codegraph-init-all.bat\" \"CODEGRAPH-SPEC.md\" \"IMPLEMENTATION-PLAN.md\")",
+      "mcp__codegraph__aidex_note"
     ]
   }
 }

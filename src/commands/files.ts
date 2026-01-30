@@ -1,5 +1,5 @@
 /**
- * codegraph_files command - List project files and directories
+ * files command - List project files and directories
  *
  * Supports time-based filtering via modified_since parameter to find
  * files that were recently indexed (useful for "what changed this session?")
@@ -7,6 +7,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase, createQueries } from '../db/index.js';
 import { parseTimeOffset } from './query.js';
 import type { ProjectFileRow, FileRow } from '../db/queries.js';
@@ -46,7 +47,7 @@ export function files(params: FilesParams): FilesResult {
     const { path: projectPath, type, pattern, modifiedSince } = params;
 
     // Validate project path
-    const dbPath = join(projectPath, '.codegraph', 'index.db');
+    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
@@ -54,7 +55,7 @@ export function files(params: FilesParams): FilesResult {
             files: [],
             totalFiles: 0,
             byType: {},
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 

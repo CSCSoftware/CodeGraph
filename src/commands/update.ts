@@ -1,5 +1,5 @@
 /**
- * codegraph_update command - Update index for a single file
+ * update command - Update index for a single file
  *
  * Supports:
  * - Full re-index of a file (no line range specified)
@@ -9,8 +9,9 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
-import { openDatabase, createQueries, type CodeGraphDatabase, type Queries } from '../db/index.js';
+import { openDatabase, createQueries, type AiDexDatabase, type Queries } from '../db/index.js';
 import { extract } from '../parser/index.js';
 
 // ============================================================
@@ -46,8 +47,8 @@ export function update(params: UpdateParams): UpdateResult {
     const relativePath = params.file.replace(/\\/g, '/');
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
@@ -58,7 +59,7 @@ export function update(params: UpdateParams): UpdateResult {
             methodsUpdated: 0,
             typesUpdated: 0,
             durationMs: Date.now() - startTime,
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
@@ -302,15 +303,15 @@ export function remove(params: RemoveParams): RemoveResult {
     const relativePath = params.file.replace(/\\/g, '/');
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
             success: false,
             file: relativePath,
             removed: false,
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 

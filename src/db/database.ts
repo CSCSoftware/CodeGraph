@@ -1,5 +1,5 @@
 /**
- * SQLite Database wrapper for CodeGraph
+ * SQLite Database wrapper for AiDex
  */
 
 import Database from 'better-sqlite3';
@@ -14,7 +14,7 @@ export interface DatabaseConfig {
     readonly?: boolean;
 }
 
-export class CodeGraphDatabase {
+export class AiDexDatabase {
     private db: Database.Database;
     private dbPath: string;
 
@@ -134,19 +134,19 @@ export class CodeGraphDatabase {
 }
 
 /**
- * Open or create a CodeGraph database
+ * Open or create an AiDex database
  */
-export function openDatabase(dbPath: string, readonly = false): CodeGraphDatabase {
-    return new CodeGraphDatabase({ dbPath, readonly });
+export function openDatabase(dbPath: string, readonly = false): AiDexDatabase {
+    return new AiDexDatabase({ dbPath, readonly });
 }
 
 /**
- * Create and initialize a new CodeGraph database
+ * Create and initialize a new AiDex database
  * If incremental=true, keeps existing data for incremental updates
  * If incremental=false (default), clears all data for fresh re-index
  */
-export function createDatabase(dbPath: string, projectName?: string, projectRoot?: string, incremental = false): CodeGraphDatabase {
-    const db = new CodeGraphDatabase({ dbPath });
+export function createDatabase(dbPath: string, projectName?: string, projectRoot?: string, incremental = false): AiDexDatabase {
+    const db = new AiDexDatabase({ dbPath });
     db.initSchema();
 
     if (!incremental) {

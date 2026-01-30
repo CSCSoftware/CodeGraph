@@ -1,11 +1,12 @@
 /**
- * Signature commands for CodeGraph
+ * Signature commands for AiDex
  * Retrieves file signatures (header comments, types, methods)
  */
 
 import { join, normalize } from 'path';
 import { existsSync } from 'fs';
 import { glob } from 'glob';
+import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase } from '../db/index.js';
 import { createQueries, type MethodRow, type TypeRow } from '../db/queries.js';
 
@@ -14,7 +15,7 @@ import { createQueries, type MethodRow, type TypeRow } from '../db/queries.js';
 // ============================================================
 
 export interface SignatureParams {
-    /** Project path (containing .codegraph) */
+    /** Project path (containing index dir) */
     path: string;
     /** Relative file path within the project */
     file: string;
@@ -41,7 +42,7 @@ export interface SignatureResult {
 }
 
 export interface SignaturesParams {
-    /** Project path (containing .codegraph) */
+    /** Project path (containing index dir) */
     path: string;
     /** Glob pattern to match files (e.g., "src/Core/**.cs") */
     pattern?: string;
@@ -69,8 +70,8 @@ export function signature(params: SignatureParams): SignatureResult {
     const file = params.file.replace(/\\/g, '/');
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
@@ -79,7 +80,7 @@ export function signature(params: SignatureParams): SignatureResult {
             headerComments: null,
             types: [],
             methods: [],
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
@@ -147,15 +148,15 @@ export function signatures(params: SignaturesParams): SignaturesResult {
     const { path: projectPath, pattern, files } = params;
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
             success: false,
             signatures: [],
             totalFiles: 0,
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 

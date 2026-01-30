@@ -1,5 +1,5 @@
 /**
- * TypeScript/JavaScript language configuration for CodeGraph
+ * TypeScript/JavaScript language configuration for AiDex
  */
 
 /**

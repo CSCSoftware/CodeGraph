@@ -1,5 +1,5 @@
 /**
- * MCP Tool definitions and handlers for CodeGraph
+ * MCP Tool definitions and handlers for AiDex
  */
 
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -8,6 +8,7 @@ import { join } from 'path';
 import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, type QueryMode } from '../commands/index.js';
 import { openDatabase } from '../db/index.js';
 import { startViewer, stopViewer } from '../viewer/index.js';
+import { PRODUCT_NAME, PRODUCT_NAME_LOWER, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
 /**
  * Register all available tools
@@ -15,8 +16,8 @@ import { startViewer, stopViewer } from '../viewer/index.js';
 export function registerTools(): Tool[] {
     return [
         {
-            name: 'codegraph_init',
-            description: 'Initialize CodeGraph indexing for a project. Scans all source files and builds a searchable index of identifiers, methods, types, and signatures.',
+            name: `${TOOL_PREFIX}init`,
+            description: `Initialize ${PRODUCT_NAME} indexing for a project. Scans all source files and builds a searchable index of identifiers, methods, types, and signatures.`,
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -38,14 +39,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_query',
-            description: 'Search for terms/identifiers in the CodeGraph index. Returns file locations where the term appears. PREFERRED over Grep/Glob for code searches when .codegraph/ exists - faster and more precise. Use this instead of grep for finding functions, classes, variables by name.',
+            name: `${TOOL_PREFIX}query`,
+            description: `Search for terms/identifiers in the ${PRODUCT_NAME} index. Returns file locations where the term appears. PREFERRED over Grep/Glob for code searches when ${INDEX_DIR}/ exists - faster and more precise. Use this instead of grep for finding functions, classes, variables by name.`,
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     term: {
                         type: 'string',
@@ -82,28 +83,28 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_status',
-            description: 'Get CodeGraph server status and statistics for an indexed project',
+            name: `${TOOL_PREFIX}status`,
+            description: `Get ${PRODUCT_NAME} server status and statistics for an indexed project`,
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory (optional, shows server status if not provided)',
+                        description: `Path to project with ${INDEX_DIR} directory (optional, shows server status if not provided)`,
                     },
                 },
                 required: [],
             },
         },
         {
-            name: 'codegraph_signature',
+            name: `${TOOL_PREFIX}signature`,
             description: 'Get the signature of a single file: header comments, types (classes/structs/interfaces), and method prototypes. Use this INSTEAD of reading entire files when you only need to know what methods/classes exist. Much faster than Read tool for understanding file structure.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     file: {
                         type: 'string',
@@ -114,14 +115,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_signatures',
+            name: `${TOOL_PREFIX}signatures`,
             description: 'Get signatures for multiple files at once using glob pattern or file list. Returns types and method prototypes. Use INSTEAD of reading multiple files when exploring codebase structure. Much more efficient than multiple Read calls.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     pattern: {
                         type: 'string',
@@ -137,14 +138,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_update',
-            description: 'Re-index a single file. Use after editing a file to update the CodeGraph index. If the file is new, it will be added to the index. If unchanged (same hash), no update is performed.',
+            name: `${TOOL_PREFIX}update`,
+            description: `Re-index a single file. Use after editing a file to update the ${PRODUCT_NAME} index. If the file is new, it will be added to the index. If unchanged (same hash), no update is performed.`,
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     file: {
                         type: 'string',
@@ -155,14 +156,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_remove',
-            description: 'Remove a file from the CodeGraph index. Use when a file has been deleted from the project.',
+            name: `${TOOL_PREFIX}remove`,
+            description: `Remove a file from the ${PRODUCT_NAME} index. Use when a file has been deleted from the project.`,
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     file: {
                         type: 'string',
@@ -173,28 +174,28 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_summary',
+            name: `${TOOL_PREFIX}summary`,
             description: 'Get project summary including auto-detected entry points, main types, and languages. Also returns content from summary.md if it exists.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                 },
                 required: ['path'],
             },
         },
         {
-            name: 'codegraph_tree',
+            name: `${TOOL_PREFIX}tree`,
             description: 'Get the indexed file tree. Optionally filter by subdirectory, limit depth, or include statistics per file.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     subpath: {
                         type: 'string',
@@ -213,14 +214,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_describe',
+            name: `${TOOL_PREFIX}describe`,
             description: 'Add or update a section in the project summary (summary.md). Use to document project purpose, architecture, key concepts, or patterns.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     section: {
                         type: 'string',
@@ -240,14 +241,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_link',
-            description: 'Link a dependency project to enable cross-project queries. The dependency must have its own .codegraph index.',
+            name: `${TOOL_PREFIX}link`,
+            description: `Link a dependency project to enable cross-project queries. The dependency must have its own ${INDEX_DIR} index.`,
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to current project with .codegraph directory',
+                        description: `Path to current project with ${INDEX_DIR} directory`,
                     },
                     dependency: {
                         type: 'string',
@@ -262,14 +263,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_unlink',
+            name: `${TOOL_PREFIX}unlink`,
             description: 'Remove a linked dependency project.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to current project with .codegraph directory',
+                        description: `Path to current project with ${INDEX_DIR} directory`,
                     },
                     dependency: {
                         type: 'string',
@@ -280,28 +281,28 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_links',
+            name: `${TOOL_PREFIX}links`,
             description: 'List all linked dependency projects.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                 },
                 required: ['path'],
             },
         },
         {
-            name: 'codegraph_scan',
-            description: 'Scan a directory tree to find all projects with CodeGraph indexes (.codegraph directories). Use this to discover which projects are already indexed before using Grep/Glob - indexed projects should use codegraph_query instead.',
+            name: `${TOOL_PREFIX}scan`,
+            description: `Scan a directory tree to find all projects with ${PRODUCT_NAME} indexes (${INDEX_DIR} directories). Use this to discover which projects are already indexed before using Grep/Glob - indexed projects should use ${TOOL_PREFIX}query instead.`,
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Root path to scan for .codegraph directories',
+                        description: `Root path to scan for ${INDEX_DIR} directories`,
                     },
                     max_depth: {
                         type: 'number',
@@ -312,14 +313,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_files',
+            name: `${TOOL_PREFIX}files`,
             description: 'List all files and directories in the indexed project. Returns the complete project structure with file types (code, config, doc, asset, test, other) and whether each file is indexed for code search. Use modified_since to find files changed in this session.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     type: {
                         type: 'string',
@@ -339,14 +340,14 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_note',
-            description: 'Read or write a session note for the project. Use this to leave reminders for the next session (e.g., "Test the glob fix", "Refactor X"). Notes persist in the CodeGraph database and are shown when querying the project.',
+            name: `${TOOL_PREFIX}note`,
+            description: `Read or write a session note for the project. Use this to leave reminders for the next session (e.g., "Test the glob fix", "Refactor X"). Notes persist in the ${PRODUCT_NAME} database and are shown when querying the project.`,
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     note: {
                         type: 'string',
@@ -365,28 +366,28 @@ export function registerTools(): Tool[] {
             },
         },
         {
-            name: 'codegraph_session',
-            description: 'Start or check a CodeGraph session. Call this at the beginning of a new chat session to: (1) detect files changed externally since last session, (2) auto-reindex modified files, (3) get session note and last session times. Returns info for "What did we do last session?" queries.',
+            name: `${TOOL_PREFIX}session`,
+            description: `Start or check an ${PRODUCT_NAME} session. Call this at the beginning of a new chat session to: (1) detect files changed externally since last session, (2) auto-reindex modified files, (3) get session note and last session times. Returns info for "What did we do last session?" queries.`,
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                 },
                 required: ['path'],
             },
         },
         {
-            name: 'codegraph_viewer',
+            name: `${TOOL_PREFIX}viewer`,
             description: 'Open an interactive project tree viewer in the browser. Shows the indexed file structure with clickable nodes - click on a file to see its signature (header comments, types, methods). Uses a local HTTP server with WebSocket for live updates.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Path to project with .codegraph directory',
+                        description: `Path to project with ${INDEX_DIR} directory`,
                     },
                     action: {
                         type: 'string',
@@ -409,58 +410,58 @@ export async function handleToolCall(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
         switch (name) {
-            case 'codegraph_init':
+            case `${TOOL_PREFIX}init`:
                 return await handleInit(args);
 
-            case 'codegraph_query':
+            case `${TOOL_PREFIX}query`:
                 return handleQuery(args);
 
-            case 'codegraph_status':
+            case `${TOOL_PREFIX}status`:
                 return handleStatus(args);
 
-            case 'codegraph_signature':
+            case `${TOOL_PREFIX}signature`:
                 return handleSignature(args);
 
-            case 'codegraph_signatures':
+            case `${TOOL_PREFIX}signatures`:
                 return handleSignatures(args);
 
-            case 'codegraph_update':
+            case `${TOOL_PREFIX}update`:
                 return handleUpdate(args);
 
-            case 'codegraph_remove':
+            case `${TOOL_PREFIX}remove`:
                 return handleRemove(args);
 
-            case 'codegraph_summary':
+            case `${TOOL_PREFIX}summary`:
                 return handleSummary(args);
 
-            case 'codegraph_tree':
+            case `${TOOL_PREFIX}tree`:
                 return handleTree(args);
 
-            case 'codegraph_describe':
+            case `${TOOL_PREFIX}describe`:
                 return handleDescribe(args);
 
-            case 'codegraph_link':
+            case `${TOOL_PREFIX}link`:
                 return handleLink(args);
 
-            case 'codegraph_unlink':
+            case `${TOOL_PREFIX}unlink`:
                 return handleUnlink(args);
 
-            case 'codegraph_links':
+            case `${TOOL_PREFIX}links`:
                 return handleLinks(args);
 
-            case 'codegraph_scan':
+            case `${TOOL_PREFIX}scan`:
                 return handleScan(args);
 
-            case 'codegraph_files':
+            case `${TOOL_PREFIX}files`:
                 return handleFiles(args);
 
-            case 'codegraph_note':
+            case `${TOOL_PREFIX}note`:
                 return handleNote(args);
 
-            case 'codegraph_session':
+            case `${TOOL_PREFIX}session`:
                 return handleSession(args);
 
-            case 'codegraph_viewer':
+            case `${TOOL_PREFIX}viewer`:
                 return handleViewer(args);
 
             default:
@@ -486,7 +487,7 @@ export async function handleToolCall(
 }
 
 /**
- * Handle codegraph_init
+ * Handle init
  */
 async function handleInit(args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }> }> {
     const path = args.path as string;
@@ -503,8 +504,8 @@ async function handleInit(args: Record<string, unknown>): Promise<{ content: Arr
     });
 
     if (result.success) {
-        let message = `✓ CodeGraph initialized for project\n\n`;
-        message += `Database: ${result.codegraphPath}/index.db\n`;
+        let message = `✓ ${PRODUCT_NAME} initialized for project\n\n`;
+        message += `Database: ${result.indexPath}/index.db\n`;
         message += `Files indexed: ${result.filesIndexed}`;
         if (result.filesSkipped > 0) {
             message += ` (${result.filesSkipped} unchanged, skipped)`;
@@ -537,7 +538,7 @@ async function handleInit(args: Record<string, unknown>): Promise<{ content: Arr
 }
 
 /**
- * Handle codegraph_query
+ * Handle query
  */
 function handleQuery(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -601,7 +602,7 @@ function handleQuery(args: Record<string, unknown>): { content: Array<{ type: st
 }
 
 /**
- * Handle codegraph_status
+ * Handle status
  */
 function handleStatus(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string | undefined;
@@ -614,23 +615,23 @@ function handleStatus(args: Record<string, unknown>): { content: Array<{ type: s
                     text: JSON.stringify({
                         status: 'running',
                         version: '0.1.0',
-                        message: 'CodeGraph MCP server is running. Use codegraph_init to index a project.',
+                        message: `${PRODUCT_NAME} MCP server is running. Use ${TOOL_PREFIX}init to index a project.`,
                     }, null, 2),
                 },
             ],
         };
     }
 
-    // Check if project has .codegraph
-    const codegraphDir = join(path, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    // Check if project has index
+    const indexDir = join(path, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
             content: [
                 {
                     type: 'text',
-                    text: `No CodeGraph index found at ${path}. Run codegraph_init first.`,
+                    text: `No ${PRODUCT_NAME} index found at ${path}. Run ${TOOL_PREFIX}init first.`,
                 },
             ],
         };
@@ -659,7 +660,7 @@ function handleStatus(args: Record<string, unknown>): { content: Array<{ type: s
 }
 
 /**
- * Handle codegraph_signature
+ * Handle signature
  */
 function handleSignature(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -719,7 +720,7 @@ function handleSignature(args: Record<string, unknown>): { content: Array<{ type
 }
 
 /**
- * Handle codegraph_signatures
+ * Handle signatures
  */
 function handleSignatures(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -799,7 +800,7 @@ function handleSignatures(args: Record<string, unknown>): { content: Array<{ typ
 }
 
 /**
- * Handle codegraph_update
+ * Handle update
  */
 function handleUpdate(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -838,7 +839,7 @@ function handleUpdate(args: Record<string, unknown>): { content: Array<{ type: s
 }
 
 /**
- * Handle codegraph_remove
+ * Handle remove
  */
 function handleRemove(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -870,7 +871,7 @@ function handleRemove(args: Record<string, unknown>): { content: Array<{ type: s
 }
 
 /**
- * Handle codegraph_summary
+ * Handle summary
  */
 function handleSummary(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -918,7 +919,7 @@ function handleSummary(args: Record<string, unknown>): { content: Array<{ type: 
 }
 
 /**
- * Handle codegraph_tree
+ * Handle tree
  */
 function handleTree(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -968,7 +969,7 @@ function handleTree(args: Record<string, unknown>): { content: Array<{ type: str
 }
 
 /**
- * Handle codegraph_describe
+ * Handle describe
  */
 function handleDescribe(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -1007,7 +1008,7 @@ function handleDescribe(args: Record<string, unknown>): { content: Array<{ type:
 }
 
 /**
- * Handle codegraph_link
+ * Handle link
  */
 function handleLink(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -1037,7 +1038,7 @@ function handleLink(args: Record<string, unknown>): { content: Array<{ type: str
 }
 
 /**
- * Handle codegraph_unlink
+ * Handle unlink
  */
 function handleUnlink(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -1069,7 +1070,7 @@ function handleUnlink(args: Record<string, unknown>): { content: Array<{ type: s
 }
 
 /**
- * Handle codegraph_links
+ * Handle links
  */
 function handleLinks(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -1114,7 +1115,7 @@ function handleLinks(args: Record<string, unknown>): { content: Array<{ type: st
 }
 
 /**
- * Handle codegraph_scan
+ * Handle scan
  */
 function handleScan(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -1138,11 +1139,11 @@ function handleScan(args: Record<string, unknown>): { content: Array<{ type: str
 
     if (result.projects.length === 0) {
         return {
-            content: [{ type: 'text', text: `No CodeGraph indexes found in ${result.searchPath}\n(scanned ${result.scannedDirs} directories)` }],
+            content: [{ type: 'text', text: `No ${PRODUCT_NAME} indexes found in ${result.searchPath}\n(scanned ${result.scannedDirs} directories)` }],
         };
     }
 
-    let message = `# CodeGraph Indexes Found (${result.projects.length})\n\n`;
+    let message = `# ${PRODUCT_NAME} Indexes Found (${result.projects.length})\n\n`;
     message += `Scanned: ${result.searchPath} (${result.scannedDirs} directories)\n\n`;
 
     for (const proj of result.projects) {
@@ -1159,7 +1160,7 @@ function handleScan(args: Record<string, unknown>): { content: Array<{ type: str
 }
 
 /**
- * Handle codegraph_files
+ * Handle files
  */
 function handleFiles(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -1244,7 +1245,7 @@ function handleFiles(args: Record<string, unknown>): { content: Array<{ type: st
 }
 
 /**
- * Handle codegraph_note
+ * Handle note
  */
 function handleNote(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -1298,7 +1299,7 @@ function handleNote(args: Record<string, unknown>): { content: Array<{ type: str
 }
 
 /**
- * Handle codegraph_session
+ * Handle session
  */
 function handleSession(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const path = args.path as string;
@@ -1332,7 +1333,7 @@ function handleSession(args: Record<string, unknown>): { content: Array<{ type: 
         message += `- **Start:** ${formatSessionTime(result.sessionInfo.lastSessionStart)}\n`;
         message += `- **End:** ${formatSessionTime(result.sessionInfo.lastSessionEnd)}\n`;
         message += `- **Duration:** ${formatDuration(result.sessionInfo.lastSessionStart, result.sessionInfo.lastSessionEnd)}\n`;
-        message += `\n💡 Query last session changes with:\n\`codegraph_query({ term: "...", modified_since: "${result.sessionInfo.lastSessionStart}", modified_before: "${result.sessionInfo.lastSessionEnd}" })\`\n\n`;
+        message += `\n💡 Query last session changes with:\n\`${TOOL_PREFIX}query({ term: "...", modified_since: "${result.sessionInfo.lastSessionStart}", modified_before: "${result.sessionInfo.lastSessionEnd}" })\`\n\n`;
     }
 
     // External changes
@@ -1363,7 +1364,7 @@ function handleSession(args: Record<string, unknown>): { content: Array<{ type: 
 }
 
 /**
- * Handle codegraph_viewer
+ * Handle viewer
  */
 async function handleViewer(args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }> }> {
     const path = args.path as string;
@@ -1375,11 +1376,11 @@ async function handleViewer(args: Record<string, unknown>): Promise<{ content: A
         };
     }
 
-    // Check if .codegraph exists
-    const codegraphPath = join(path, '.codegraph');
-    if (!existsSync(codegraphPath)) {
+    // Check if index directory exists
+    const indexPath = join(path, INDEX_DIR);
+    if (!existsSync(indexPath)) {
         return {
-            content: [{ type: 'text', text: `Error: No .codegraph directory found at ${path}. Run codegraph_init first.` }],
+            content: [{ type: 'text', text: `Error: No ${INDEX_DIR} directory found at ${path}. Run ${TOOL_PREFIX}init first.` }],
         };
     }
 

@@ -1,5 +1,5 @@
 /**
- * codegraph_init command - Initialize CodeGraph for a project
+ * init command - Initialize AiDex for a project
  */
 
 import { existsSync, mkdirSync, readFileSync, statSync } from 'fs';
@@ -7,8 +7,9 @@ import { join, relative, basename, extname } from 'path';
 import { glob } from 'glob';
 import { createHash } from 'crypto';
 import { minimatch } from 'minimatch';
+import { INDEX_DIR } from '../constants.js';
 
-import { createDatabase, createQueries, type CodeGraphDatabase, type Queries } from '../db/index.js';
+import { createDatabase, createQueries, type AiDexDatabase, type Queries } from '../db/index.js';
 import { extract, getSupportedExtensions } from '../parser/index.js';
 
 // ============================================================
@@ -25,7 +26,7 @@ export interface InitParams {
 
 export interface InitResult {
     success: boolean;
-    codegraphPath: string;
+    indexPath: string;
     filesIndexed: number;
     filesSkipped: number;  // Unchanged files
     filesRemoved: number;  // Files removed due to exclude patterns
@@ -168,7 +169,7 @@ export async function init(params: InitParams): Promise<InitResult> {
     if (!existsSync(params.path)) {
         return {
             success: false,
-            codegraphPath: '',
+            indexPath: '',
             filesIndexed: 0,
             filesSkipped: 0,
             filesRemoved: 0,
@@ -184,7 +185,7 @@ export async function init(params: InitParams): Promise<InitResult> {
     if (!stat.isDirectory()) {
         return {
             success: false,
-            codegraphPath: '',
+            indexPath: '',
             filesIndexed: 0,
             filesSkipped: 0,
             filesRemoved: 0,
@@ -196,13 +197,13 @@ export async function init(params: InitParams): Promise<InitResult> {
         };
     }
 
-    // Create .codegraph directory
-    const codegraphDir = join(params.path, '.codegraph');
-    if (!existsSync(codegraphDir)) {
-        mkdirSync(codegraphDir, { recursive: true });
+    // Create index directory
+    const indexDir = join(params.path, INDEX_DIR);
+    if (!existsSync(indexDir)) {
+        mkdirSync(indexDir, { recursive: true });
     }
 
-    const dbPath = join(codegraphDir, 'index.db');
+    const dbPath = join(indexDir, 'index.db');
     const projectName = params.name ?? basename(params.path);
 
     // Determine if incremental (default) or fresh re-index
@@ -345,7 +346,7 @@ export async function init(params: InitParams): Promise<InitResult> {
 
     return {
         success: true,
-        codegraphPath: codegraphDir,
+        indexPath: indexDir,
         filesIndexed,
         filesSkipped,
         filesRemoved,
@@ -373,7 +374,7 @@ interface IndexFileResult {
 function indexFile(
     projectPath: string,
     relativePath: string,
-    db: CodeGraphDatabase,
+    db: AiDexDatabase,
     queries: Queries,
     incremental: boolean = false
 ): IndexFileResult {

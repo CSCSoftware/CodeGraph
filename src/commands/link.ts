@@ -1,11 +1,12 @@
 /**
- * codegraph_link command - Link dependency projects
+ * link command - Link dependency projects
  *
- * Allows cross-project queries by linking other CodeGraph instances.
+ * Allows cross-project queries by linking other AiDex instances.
  */
 
 import { existsSync } from 'fs';
 import { join, basename } from 'path';
+import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
 import { openDatabase, createQueries } from '../db/index.js';
 
@@ -15,7 +16,7 @@ import { openDatabase, createQueries } from '../db/index.js';
 
 export interface LinkParams {
     path: string;           // Current project path
-    dependency: string;     // Path to dependency project (with .codegraph)
+    dependency: string;     // Path to dependency project (with index dir)
     name?: string;          // Optional display name
 }
 
@@ -64,28 +65,28 @@ export function link(params: LinkParams): LinkResult {
     const { path: projectPath, dependency: dependencyPath, name } = params;
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
             success: false,
             name: '',
             filesAvailable: 0,
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
     // Validate dependency path
-    const depCodegraphDir = join(dependencyPath, '.codegraph');
-    const depDbPath = join(depCodegraphDir, 'index.db');
+    const depIndexDir = join(dependencyPath, INDEX_DIR);
+    const depDbPath = join(depIndexDir, 'index.db');
 
     if (!existsSync(depDbPath)) {
         return {
             success: false,
             name: '',
             filesAvailable: 0,
-            error: `No CodeGraph index found at ${dependencyPath}. Run codegraph_init on dependency first.`,
+            error: `No ${PRODUCT_NAME} index found at ${dependencyPath}. Run ${TOOL_PREFIX}init on dependency first.`,
         };
     }
 
@@ -147,14 +148,14 @@ export function unlink(params: UnlinkParams): UnlinkResult {
     const { path: projectPath, dependency: dependencyPath } = params;
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
             success: false,
             removed: false,
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
@@ -190,14 +191,14 @@ export function listLinks(params: ListLinksParams): ListLinksResult {
     const { path: projectPath } = params;
 
     // Validate project path
-    const codegraphDir = join(projectPath, '.codegraph');
-    const dbPath = join(codegraphDir, 'index.db');
+    const indexDir = join(projectPath, INDEX_DIR);
+    const dbPath = join(indexDir, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
             success: false,
             dependencies: [],
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
@@ -212,7 +213,7 @@ export function listLinks(params: ListLinksParams): ListLinksResult {
         const dependencies: LinkedProject[] = [];
 
         for (const dep of deps) {
-            const depDbPath = join(dep.path, '.codegraph', 'index.db');
+            const depDbPath = join(dep.path, INDEX_DIR, 'index.db');
             const available = existsSync(depDbPath);
 
             let filesAvailable = 0;

@@ -1,10 +1,10 @@
-# CodeGraph - Projekt-Einstieg für Uwe
+# AiDex - Projekt-Einstieg für Uwe
 
 Stand: 27.01.2026 | Version: 1.3.0
 
 ---
 
-## Was ist CodeGraph?
+## Was ist AiDex?
 
 Ein **MCP-Server** für Claude Code. Er indexiert deinen Quellcode in einer SQLite-Datenbank, damit Claude Funktionen, Klassen und Variablen in Millisekunden findet - statt mit Grep alle Dateien zu durchsuchen.
 
@@ -14,13 +14,13 @@ Ein **MCP-Server** für Claude Code. Er indexiert deinen Quellcode in einer SQLi
 
 ## Wie wird es benutzt?
 
-CodeGraph läuft als MCP-Server im Hintergrund. Claude Code ruft die Tools automatisch auf.
+AiDex läuft als MCP-Server im Hintergrund. Claude Code ruft die Tools automatisch auf.
 
 **Registrierung** in `~/.claude/settings.json`:
 ```json
-"codegraph": {
+"aidex": {
   "command": "node",
-  "args": ["Q:/develop/Tools/CodeGraph/build/index.js"]
+  "args": ["Q:/develop/Tools/AiDex/build/index.js"]
 }
 ```
 
@@ -32,32 +32,32 @@ CodeGraph läuft als MCP-Server im Hintergrund. Claude Code ruft die Tools autom
 
 ### 1. Index
 
-Eine SQLite-Datenbank (`.codegraph/index.db`) speichert:
+Eine SQLite-Datenbank (`.aidex/index.db`) speichert:
 - Alle Dateien mit ihrem Hash
 - Alle Identifier (Funktionsnamen, Variablen, Klassen)
 - Methoden-Signaturen und Typen
 - Zeilennummern
 
-**Erstellen:** `codegraph_init` scannt das Projekt und baut den Index.
+**Erstellen:** `aidex_init` scannt das Projekt und baut den Index.
 
 ### 2. Hash-basiertes Update
 
-Jede Datei hat einen Hash. Bei `codegraph_update`:
+Jede Datei hat einen Hash. Bei `aidex_update`:
 - Hash unverändert → nichts tun
 - Hash geändert → Datei neu parsen, Index aktualisieren
 
-**Wichtig:** Claude ruft `codegraph_update` nach jedem Edit auf. Das steht in der Tool-Beschreibung (`tools.ts` Zeile 141), und Claude befolgt es.
+**Wichtig:** Claude ruft `aidex_update` nach jedem Edit auf. Das steht in der Tool-Beschreibung (`tools.ts` Zeile 141), und Claude befolgt es.
 
 ### 3. Session-Tracking
 
-`codegraph_session` speichert den Startzeitpunkt. Damit kann man später fragen: "Was wurde in dieser Session geändert?"
+`aidex_session` speichert den Startzeitpunkt. Damit kann man später fragen: "Was wurde in dieser Session geändert?"
 
 - `last_indexed > session_start` = Datei wurde in dieser Session bearbeitet
 - Bei Session-Start werden externe Änderungen erkannt und automatisch re-indexiert
 
 ### 4. Session-Notizen
 
-`codegraph_note` speichert Text in der Datenbank. Persistiert zwischen Sessions. Für Erinnerungen wie "Morgen X testen".
+`aidex_note` speichert Text in der Datenbank. Persistiert zwischen Sessions. Für Erinnerungen wie "Morgen X testen".
 
 ### 5. Viewer
 
@@ -68,7 +68,7 @@ Ein HTTP-Server mit WebSocket (`localhost:3333`). Zeigt den Projektbaum im Brows
 ## Projektstruktur
 
 ```
-Q:\develop\Tools\CodeGraph\
+Q:\develop\Tools\AiDex\
 ├── src/
 │   ├── index.ts                 # Entry Point (MCP-Server oder CLI)
 │   │
@@ -108,7 +108,7 @@ Q:\develop\Tools\CodeGraph\
 │       └── server.ts            # HTTP + WebSocket Server
 │
 ├── build/                       # Kompilierter Code (npm run build)
-├── .codegraph/                  # Index dieses Projekts selbst
+├── .aidex/                  # Index dieses Projekts selbst
 └── .claude/
     ├── CLAUDE.md                # Technische Doku für Claude
     └── PROJEKT-EINSTIEG.md      # Diese Datei
@@ -135,32 +135,32 @@ Q:\develop\Tools\CodeGraph\
 ## Tools (18 Stück)
 
 ### Suche & Index
-- `codegraph_init` - Projekt indexieren
-- `codegraph_query` - Identifier suchen (exact/contains/starts_with)
-- `codegraph_update` - Eine Datei neu indexieren
-- `codegraph_remove` - Datei aus Index entfernen
-- `codegraph_status` - Server-/Projekt-Status
+- `aidex_init` - Projekt indexieren
+- `aidex_query` - Identifier suchen (exact/contains/starts_with)
+- `aidex_update` - Eine Datei neu indexieren
+- `aidex_remove` - Datei aus Index entfernen
+- `aidex_status` - Server-/Projekt-Status
 
 ### Signaturen (statt Dateien lesen)
-- `codegraph_signature` - Signatur einer Datei
-- `codegraph_signatures` - Signaturen mehrerer Dateien (Glob)
+- `aidex_signature` - Signatur einer Datei
+- `aidex_signatures` - Signaturen mehrerer Dateien (Glob)
 
 ### Projekt-Übersicht
-- `codegraph_summary` - Entry Points, Sprachen, Haupttypen
-- `codegraph_tree` - Dateibaum mit Stats
-- `codegraph_describe` - Doku zu summary.md hinzufügen
-- `codegraph_files` - Alle Dateien auflisten, mit Typ-Filter
+- `aidex_summary` - Entry Points, Sprachen, Haupttypen
+- `aidex_tree` - Dateibaum mit Stats
+- `aidex_describe` - Doku zu summary.md hinzufügen
+- `aidex_files` - Alle Dateien auflisten, mit Typ-Filter
 
 ### Cross-Project
-- `codegraph_link` - Dependency verlinken
-- `codegraph_unlink` - Dependency entfernen
-- `codegraph_links` - Verlinkte Dependencies auflisten
-- `codegraph_scan` - Indexierte Projekte finden
+- `aidex_link` - Dependency verlinken
+- `aidex_unlink` - Dependency entfernen
+- `aidex_links` - Verlinkte Dependencies auflisten
+- `aidex_scan` - Indexierte Projekte finden
 
 ### Session
-- `codegraph_session` - Session starten, externe Änderungen erkennen
-- `codegraph_note` - Session-Notiz lesen/schreiben
-- `codegraph_viewer` - Browser-Explorer öffnen
+- `aidex_session` - Session starten, externe Änderungen erkennen
+- `aidex_note` - Session-Notiz lesen/schreiben
+- `aidex_viewer` - Browser-Explorer öffnen
 
 ---
 
@@ -186,7 +186,7 @@ Jede Sprache hat einen Keyword-Filter in `src/parser/languages/`, damit Sprachke
 ### Warum kein automatisches Re-Indexing bei Dateiänderungen?
 
 Der MCP-Server beobachtet das Dateisystem nicht aktiv. Stattdessen:
-- Claude ruft `codegraph_update` auf (weil die Tool-Beschreibung es sagt)
+- Claude ruft `aidex_update` auf (weil die Tool-Beschreibung es sagt)
 - Bei Session-Start werden externe Änderungen erkannt
 
 Das ist einfacher, zuverlässiger und braucht keine Hintergrundprozesse.
@@ -200,8 +200,8 @@ Das ist einfacher, zuverlässiger und braucht keine Hintergrundprozesse.
 
 ### Warum Tool-Beschreibungen so wichtig sind?
 
-Claude liest die Beschreibungen und entscheidet, wann er ein Tool aufruft. Die Beschreibung von `codegraph_update` sagt:
-> "Use after editing a file to update the CodeGraph index."
+Claude liest die Beschreibungen und entscheidet, wann er ein Tool aufruft. Die Beschreibung von `aidex_update` sagt:
+> "Use after editing a file to update the AiDex index."
 
 Das ist die einzige "Konfiguration", die Claude braucht.
 
@@ -211,16 +211,16 @@ Das ist die einzige "Konfiguration", die Claude braucht.
 
 | Problem | Ursache | Lösung |
 |---------|---------|--------|
-| Suche findet falsche Zeilennummern | Index veraltet | `codegraph_init` oder `codegraph_update` |
-| "No CodeGraph index found" | Projekt nicht indexiert | `codegraph_init` ausführen |
-| Viewer zeigt nichts | Server nicht gestartet | `codegraph_viewer` aufrufen |
+| Suche findet falsche Zeilennummern | Index veraltet | `aidex_init` oder `aidex_update` |
+| "No AiDex index found" | Projekt nicht indexiert | `aidex_init` ausführen |
+| Viewer zeigt nichts | Server nicht gestartet | `aidex_viewer` aufrufen |
 | Neue Sprache wird nicht erkannt | Kein Parser | Prüfen ob Sprache in der Liste ist |
 
 ---
 
 ## Nächste Schritte (Stand 27.01.2026)
 
-Siehe Session-Notiz (`codegraph_note`):
+Siehe Session-Notiz (`aidex_note`):
 
 > Viewer prüfen: Zeigt er Session-Änderungen (last_indexed > session_start) oder Disk-vs-DB-Hash-Unterschiede?
 
@@ -230,7 +230,7 @@ Siehe Session-Notiz (`codegraph_note`):
 
 1. `npm run build` (falls Code geändert)
 2. Claude Code starten
-3. `codegraph_session` aufrufen - zeigt Notizen und externe Änderungen
+3. `aidex_session` aufrufen - zeigt Notizen und externe Änderungen
 4. Loslegen
 
 ---

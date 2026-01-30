@@ -1,5 +1,5 @@
 /**
- * Python language configuration for CodeGraph
+ * Python language configuration for AiDex
  */
 
 /**

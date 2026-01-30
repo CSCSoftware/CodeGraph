@@ -1,5 +1,5 @@
 /**
- * Ruby language configuration for CodeGraph
+ * Ruby language configuration for AiDex
  */
 
 /**

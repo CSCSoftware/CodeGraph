@@ -1,5 +1,5 @@
 /**
- * C# language configuration for CodeGraph
+ * C# language configuration for AiDex
  */
 
 /**

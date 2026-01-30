@@ -1,8 +1,8 @@
-# CodeGraph - CLAUDE.md
+# AiDex - CLAUDE.md
 
 MCP Server für persistentes Code-Indexing. Ermöglicht Claude Code schnelle, präzise Suchen statt Grep/Glob.
 
-**Version:** 1.3.1 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/CodeGraph
+**Version:** 1.3.1 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/AiDex
 
 ## Build & Run
 
@@ -11,53 +11,68 @@ npm install && npm run build    # Einmalig
 npm run build                   # Nach Code-Änderungen
 ```
 
-Registriert in `~/.claude/settings.json`:
+Registriert als MCP Server `aidex` (Prefix: `mcp__aidex__aidex_*`).
+
+**Claude Code** (`~/.claude/settings.json`):
 ```json
-"codegraph": {
-  "command": "node",
-  "args": ["Q:/develop/Tools/CodeGraph/build/index.js"]
+"mcpServers": {
+  "aidex": {
+    "command": "node",
+    "args": ["Q:/develop/Tools/CodeGraph/build/index.js"]
+  }
+}
+```
+
+**Claude Desktop** (`%APPDATA%/Claude/claude_desktop_config.json`):
+```json
+"mcpServers": {
+  "aidex": {
+    "command": "C:\\Program Files\\nodejs\\node.exe",
+    "args": ["Q:\\develop\\Tools\\CodeGraph\\build\\index.js"]
+  }
 }
 ```
 
 **Nach Änderungen:** Build ausführen, dann Claude Code neu starten.
+**MCP-Name:** Server muss als `"aidex"` registriert sein → Prefix wird `mcp__aidex__aidex_*`.
 
 ## Tools (18)
 
 ### Suche & Index
 | Tool | Beschreibung |
 |------|--------------|
-| `codegraph_init` | Projekt indexieren |
-| `codegraph_query` | Terme suchen (exact/contains/starts_with), Zeit-Filter |
-| `codegraph_status` | Index-Statistiken |
-| `codegraph_update` | Einzelne Datei neu indexieren |
-| `codegraph_remove` | Datei aus Index entfernen |
+| `aidex_init` | Projekt indexieren |
+| `aidex_query` | Terme suchen (exact/contains/starts_with), Zeit-Filter |
+| `aidex_status` | Index-Statistiken |
+| `aidex_update` | Einzelne Datei neu indexieren |
+| `aidex_remove` | Datei aus Index entfernen |
 
 ### Signaturen (statt Read!)
 | Tool | Beschreibung |
 |------|--------------|
-| `codegraph_signature` | Datei-Signatur (Types + Methods) |
-| `codegraph_signatures` | Mehrere Dateien (Glob-Pattern) |
+| `aidex_signature` | Datei-Signatur (Types + Methods) |
+| `aidex_signatures` | Mehrere Dateien (Glob-Pattern) |
 
 ### Projekt-Übersicht
 | Tool | Beschreibung |
 |------|--------------|
-| `codegraph_summary` | Projekt-Übersicht mit Entry Points |
-| `codegraph_tree` | Dateibaum mit Stats |
-| `codegraph_describe` | Dokumentation zu summary.md |
-| `codegraph_files` | Projektdateien nach Typ, `modified_since` |
+| `aidex_summary` | Projekt-Übersicht mit Entry Points |
+| `aidex_tree` | Dateibaum mit Stats |
+| `aidex_describe` | Dokumentation zu summary.md |
+| `aidex_files` | Projektdateien nach Typ, `modified_since` |
 
 ### Cross-Project
 | Tool | Beschreibung |
 |------|--------------|
-| `codegraph_link/unlink/links` | Dependencies verlinken |
-| `codegraph_scan` | Indexierte Projekte finden |
+| `aidex_link/unlink/links` | Dependencies verlinken |
+| `aidex_scan` | Indexierte Projekte finden |
 
 ### Session (v1.2+)
 | Tool | Beschreibung |
 |------|--------------|
-| `codegraph_session` | Session starten, externe Änderungen erkennen |
-| `codegraph_note` | Session-Notizen (persistiert in DB) |
-| `codegraph_viewer` | Browser-Explorer mit Live-Reload (v1.3) |
+| `aidex_session` | Session starten, externe Änderungen erkennen |
+| `aidex_note` | Session-Notizen (persistiert in DB) |
+| `aidex_viewer` | Browser-Explorer mit Live-Reload (v1.3) |
 
 ## Sprachen
 
@@ -104,23 +119,23 @@ src/
 
 ### Zeit-Filter (v1.1)
 ```
-codegraph_query({ term: "render", modified_since: "2h" })
-codegraph_files({ path: ".", modified_since: "30m" })
+aidex_query({ term: "render", modified_since: "2h" })
+aidex_files({ path: ".", modified_since: "30m" })
 ```
 Formate: `30m`, `2h`, `1d`, `1w`, ISO-Datum
 
 ### Session-Notizen (v1.2)
 ```
-codegraph_note({ path: ".", note: "Fix testen" })     # Schreiben
-codegraph_note({ path: ".", append: true, note: "+" }) # Anhängen
-codegraph_note({ path: "." })                          # Lesen
-codegraph_note({ path: ".", clear: true })             # Löschen
+aidex_note({ path: ".", note: "Fix testen" })     # Schreiben
+aidex_note({ path: ".", append: true, note: "+" }) # Anhängen
+aidex_note({ path: "." })                          # Lesen
+aidex_note({ path: ".", clear: true })             # Löschen
 ```
 
 ### Interactive Viewer (v1.3)
 ```
-codegraph_viewer({ path: "." })                        # http://localhost:3333
-codegraph_viewer({ path: ".", action: "close" })
+aidex_viewer({ path: "." })                        # http://localhost:3333
+aidex_viewer({ path: ".", action: "close" })
 ```
 - Dateibaum mit Klick-Navigation
 - Signaturen anzeigen
@@ -129,7 +144,7 @@ codegraph_viewer({ path: ".", action: "close" })
 - Git-Status mit Katzen-Icons (v1.3.1)
 
 ### Auto-Cleanup (v1.3.1)
-`codegraph_init` entfernt automatisch Dateien die jetzt excluded sind (z.B. build/).
+`aidex_init` entfernt automatisch Dateien die jetzt excluded sind (z.B. build/).
 Zeigt "Files removed: N" im Ergebnis.
 
 ## CLI

@@ -1,5 +1,5 @@
 /**
- * Rust language configuration for CodeGraph
+ * Rust language configuration for AiDex
  */
 
 /**

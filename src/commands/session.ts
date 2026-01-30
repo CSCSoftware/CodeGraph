@@ -1,5 +1,5 @@
 /**
- * codegraph_session command - Session tracking and external change detection
+ * session command - Session tracking and external change detection
  *
  * Tracks session start/end times and detects files changed outside of sessions.
  * This enables:
@@ -10,6 +10,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { createHash } from 'crypto';
+import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase, createQueries } from '../db/index.js';
 import { update } from './update.js';
 
@@ -67,7 +68,7 @@ export function session(params: SessionParams): SessionResult {
     const { path: projectPath } = params;
 
     // Validate project path
-    const dbPath = join(projectPath, '.codegraph', 'index.db');
+    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
 
     if (!existsSync(dbPath)) {
         return {
@@ -77,7 +78,7 @@ export function session(params: SessionParams): SessionResult {
             externalChanges: [],
             reindexed: [],
             note: null,
-            error: `No CodeGraph index found at ${projectPath}. Run codegraph_init first.`,
+            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
         };
     }
 
@@ -174,7 +175,7 @@ export function session(params: SessionParams): SessionResult {
  * Update session heartbeat (call periodically during session)
  */
 export function updateSessionHeartbeat(projectPath: string): void {
-    const dbPath = join(projectPath, '.codegraph', 'index.db');
+    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
 
     if (!existsSync(dbPath)) {
         return;
@@ -193,7 +194,7 @@ export function updateSessionHeartbeat(projectPath: string): void {
  * Get session info without starting/updating
  */
 export function getSessionInfo(projectPath: string): SessionInfo | null {
-    const dbPath = join(projectPath, '.codegraph', 'index.db');
+    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
 
     if (!existsSync(dbPath)) {
         return null;
