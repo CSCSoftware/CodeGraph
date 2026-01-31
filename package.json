@@ -4,7 +4,8 @@
   "description": "MCP Server providing persistent code indexing for Claude Code",
   "main": "build/index.js",
   "bin": {
-    "aidex": "build/index.js"
+    "aidex": "build/index.js",
+    "aidex-mcp": "build/index.js"
   },
   "type": "module",
   "scripts": {
