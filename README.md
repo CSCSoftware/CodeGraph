@@ -1,5 +1,6 @@
 # AiDex
 
+[![npm version](https://img.shields.io/npm/v/aidex-mcp.svg)](https://www.npmjs.com/package/aidex-mcp)
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](https://nodejs.org/)
 [![MCP Server](https://img.shields.io/badge/MCP-Server-blue.svg)](https://modelcontextprotocol.io/)
@@ -108,9 +109,7 @@ The index lives in `.aidex/index.db` (SQLite) - fast, portable, no external depe
 ### 1. Install
 
 ```bash
-git clone https://github.com/CSCSoftware/AiDex.git
-cd AiDex
-npm install && npm run build
+npm install -g aidex-mcp
 ```
 
 ### 2. Register with your AI assistant
@@ -121,8 +120,7 @@ npm install && npm run build
   "mcpServers": {
     "aidex": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/path/to/AiDex/build/index.js"],
+      "command": "aidex-mcp",
       "env": {}
     }
   }
@@ -134,8 +132,7 @@ npm install && npm run build
 {
   "mcpServers": {
     "aidex": {
-      "command": "node",
-      "args": ["/path/to/AiDex/build/index.js"]
+      "command": "aidex-mcp"
     }
   }
 }
@@ -263,8 +260,14 @@ Close with `aidex_viewer({ path: ".", action: "close" })`
 ## CLI Usage
 
 ```bash
-node build/index.js scan Q:/develop   # Find all indexed projects
-node build/index.js init ./myproject  # Index a project from command line
+aidex-mcp scan Q:/develop   # Find all indexed projects
+aidex-mcp init ./myproject  # Index a project from command line
+```
+
+Or if installed from source:
+```bash
+node build/index.js scan Q:/develop
+node build/index.js init ./myproject
 ```
 
 ## Performance
