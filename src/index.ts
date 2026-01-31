@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * AiDex - MCP Server Entry Point
  *

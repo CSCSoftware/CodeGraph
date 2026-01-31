@@ -1,0 +1,33 @@
+# Source (build output is included)
+src/
+tsconfig.json
+
+# Dev/CI
+.claude/
+.aidex/
+.codegraph/
+.github/
+coverage/
+SampleLangProjects/
+
+# Docs (README is included automatically)
+CODEGRAPH-SPEC.md
+IMPLEMENTATION-PLAN.md
+
+# Scripts
+*.bat
+
+# Generated HTML
+*.html
+
+# Source maps and declaration maps
+*.d.ts.map
+*.js.map
+
+# IDE/OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
