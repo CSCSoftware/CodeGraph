@@ -2,6 +2,16 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.4.2] - 2026-01-31
+
+### Added
+- **npm package**: Published as `aidex-mcp` on npm (`npm install -g aidex-mcp`)
+- **Dual CLI commands**: Both `aidex` and `aidex-mcp` work as command names
+- **npm-publish.bat**: Script for easy npm publishing
+
+### Changed
+- README updated with npm install instructions
+
 ## [1.4.1] - 2026-01-31
 
 ### Fixed
