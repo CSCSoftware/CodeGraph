@@ -2,6 +2,15 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.5.0] - 2026-01-31
+
+### Added
+- **`aidex setup`**: Auto-register AiDex as MCP server in all detected AI clients
+  - Supports: Claude Code, Claude Desktop, Cursor, Windsurf
+  - Cross-platform: Windows, macOS, Linux
+- **`aidex unsetup`**: Remove AiDex registration from all clients
+- **Postinstall hint**: Shows `Run "aidex setup"` after npm install
+
 ## [1.4.2] - 2026-01-31
 
 ### Added

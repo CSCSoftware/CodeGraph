@@ -12,6 +12,7 @@
 
 import { createServer } from './server/mcp-server.js';
 import { scan, init } from './commands/index.js';
+import { setupMcpClients, unsetupMcpClients } from './commands/setup.js';
 import { PRODUCT_NAME, PRODUCT_NAME_LOWER } from './constants.js';
 
 async function main() {
@@ -73,6 +74,18 @@ async function main() {
         console.log(`  Types: ${result.typesFound}`);
         console.log(`  Time: ${result.durationMs}ms`);
 
+        return;
+    }
+
+    // CLI mode: setup
+    if (args[0] === 'setup') {
+        setupMcpClients();
+        return;
+    }
+
+    // CLI mode: unsetup
+    if (args[0] === 'unsetup') {
+        unsetupMcpClients();
         return;
     }
 
