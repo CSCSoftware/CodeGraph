@@ -15,6 +15,7 @@ import { homedir, platform } from 'os';
 interface ClientInfo {
     name: string;
     configPath: string;
+    detectDir: string;  // directory that indicates the client is installed
 }
 
 interface SetupResult {
@@ -45,7 +46,8 @@ function getClients(): ClientInfo[] {
     // Claude Code
     clients.push({
         name: 'Claude Code',
-        configPath: join(home, '.claude', 'settings.json')
+        configPath: join(home, '.claude', 'settings.json'),
+        detectDir: join(home, '.claude')
     });
 
     // Claude Desktop
@@ -53,30 +55,35 @@ function getClients(): ClientInfo[] {
         const appData = process.env.APPDATA || join(home, 'AppData', 'Roaming');
         clients.push({
             name: 'Claude Desktop',
-            configPath: join(appData, 'Claude', 'claude_desktop_config.json')
+            configPath: join(appData, 'Claude', 'claude_desktop_config.json'),
+            detectDir: join(appData, 'Claude')
         });
     } else if (plat === 'darwin') {
         clients.push({
             name: 'Claude Desktop',
-            configPath: join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+            configPath: join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json'),
+            detectDir: join(home, 'Library', 'Application Support', 'Claude')
         });
     } else {
         clients.push({
             name: 'Claude Desktop',
-            configPath: join(home, '.config', 'Claude', 'claude_desktop_config.json')
+            configPath: join(home, '.config', 'Claude', 'claude_desktop_config.json'),
+            detectDir: join(home, '.config', 'Claude')
         });
     }
 
     // Cursor
     clients.push({
         name: 'Cursor',
-        configPath: join(home, '.cursor', 'mcp.json')
+        configPath: join(home, '.cursor', 'mcp.json'),
+        detectDir: join(home, '.cursor')
     });
 
     // Windsurf
     clients.push({
         name: 'Windsurf',
-        configPath: join(home, '.codeium', 'windsurf', 'mcp_config.json')
+        configPath: join(home, '.codeium', 'windsurf', 'mcp_config.json'),
+        detectDir: join(home, '.codeium', 'windsurf')
     });
 
     return clients;
@@ -124,20 +131,26 @@ export function setupMcpClients(): void {
     console.log('==============================\n');
 
     for (const client of clients) {
-        if (!existsSync(client.configPath)) {
+        // Check if client is installed (detect directory exists)
+        if (!existsSync(client.detectDir)) {
             results.push({ client: client.name, status: 'skipped', configPath: client.configPath });
             console.log(`  - ${client.name} (not installed)`);
             continue;
         }
 
-        const config = readJsonConfig(client.configPath);
-        if (!config.success || !config.data) {
-            results.push({ client: client.name, status: 'error', configPath: client.configPath, message: config.error });
-            console.log(`  ✗ ${client.name} (${config.error})`);
-            continue;
+        // Read existing config or start with empty object
+        let data: Record<string, unknown>;
+        if (existsSync(client.configPath)) {
+            const config = readJsonConfig(client.configPath);
+            if (!config.success || !config.data) {
+                results.push({ client: client.name, status: 'error', configPath: client.configPath, message: config.error });
+                console.log(`  ✗ ${client.name} (${config.error})`);
+                continue;
+            }
+            data = config.data;
+        } else {
+            data = {};
         }
-
-        const data = config.data as Record<string, unknown>;
         if (!data.mcpServers || typeof data.mcpServers !== 'object') {
             data.mcpServers = {};
         }
