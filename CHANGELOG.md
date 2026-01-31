@@ -2,6 +2,11 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.5.1] - 2026-01-31
+
+### Fixed
+- **`aidex setup`**: Now creates config file if client directory exists but config is missing (e.g. fresh Claude Code install)
+
 ## [1.5.0] - 2026-01-31
 
 ### Added
