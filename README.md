@@ -120,7 +120,7 @@ npm install -g aidex-mcp
   "mcpServers": {
     "aidex": {
       "type": "stdio",
-      "command": "aidex-mcp",
+      "command": "aidex",
       "env": {}
     }
   }
@@ -132,11 +132,13 @@ npm install -g aidex-mcp
 {
   "mcpServers": {
     "aidex": {
-      "command": "aidex-mcp"
+      "command": "aidex"
     }
   }
 }
 ```
+
+> **Note:** Both `aidex` and `aidex-mcp` work as command names.
 
 > **Important:** The server name in your config determines the MCP tool prefix. Use `"aidex"` as shown above — this gives you tool names like `aidex_query`, `aidex_signature`, etc. Using a different name (e.g., `"codegraph"`) would change the prefix accordingly.
 
@@ -260,15 +262,11 @@ Close with `aidex_viewer({ path: ".", action: "close" })`
 ## CLI Usage
 
 ```bash
-aidex-mcp scan Q:/develop   # Find all indexed projects
-aidex-mcp init ./myproject  # Index a project from command line
+aidex scan Q:/develop       # Find all indexed projects
+aidex init ./myproject      # Index a project from command line
 ```
 
-Or if installed from source:
-```bash
-node build/index.js scan Q:/develop
-node build/index.js init ./myproject
-```
+> `aidex-mcp` works as an alias for `aidex`.
 
 ## Performance
 
