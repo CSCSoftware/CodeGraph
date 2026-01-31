@@ -1,6 +1,6 @@
 {
   "name": "aidex-mcp",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "MCP Server providing persistent code indexing for Claude Code",
   "main": "build/index.js",
   "bin": {
@@ -16,6 +16,7 @@
     "dev": "tsc && node build/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rimraf build",
+    "postinstall": "node scripts/postinstall.mjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

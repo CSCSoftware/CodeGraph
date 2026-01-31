@@ -106,13 +106,16 @@ The index lives in `.aidex/index.db` (SQLite) - fast, portable, no external depe
 
 ## Quick Start
 
-### 1. Install
+### 1. Install & Register
 
 ```bash
 npm install -g aidex-mcp
+aidex setup
 ```
 
-### 2. Register with your AI assistant
+`aidex setup` automatically detects and registers AiDex with your installed AI clients (Claude Code, Claude Desktop, Cursor, Windsurf). To unregister: `aidex unsetup`.
+
+### 2. Or register manually with your AI assistant
 
 **For Claude Code** (`~/.claude/settings.json` or `~/.claude.json`):
 ```json
