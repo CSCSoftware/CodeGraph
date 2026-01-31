@@ -2,6 +2,12 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.5.2] - 2026-02-01
+
+### Fixed
+- **`aidex setup` for Claude Code**: Uses `claude mcp add --scope user` instead of editing settings.json directly
+- Claude Desktop, Cursor, Windsurf still use JSON config editing
+
 ## [1.5.1] - 2026-01-31
 
 ### Fixed

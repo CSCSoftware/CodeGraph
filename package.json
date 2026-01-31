@@ -1,6 +1,6 @@
 {
   "name": "aidex-mcp",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "MCP Server providing persistent code indexing for Claude Code",
   "main": "build/index.js",
   "bin": {
