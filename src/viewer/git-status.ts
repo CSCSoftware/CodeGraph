@@ -9,8 +9,7 @@
  */
 
 import { simpleGit, SimpleGit, StatusResult } from 'simple-git';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import path from 'path';
 
 // ============================================================
 // Types
@@ -29,10 +28,14 @@ export interface GitStatusInfo {
 // ============================================================
 
 /**
- * Check if a directory is a git repository
+ * Check if a directory is inside a git repository (traverses parent dirs)
  */
-export function isGitRepo(projectPath: string): boolean {
-    return existsSync(join(projectPath, '.git'));
+export async function isGitRepo(projectPath: string): Promise<boolean> {
+    try {
+        return await simpleGit(projectPath).checkIsRepo();
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -40,7 +43,7 @@ export function isGitRepo(projectPath: string): boolean {
  * Returns a map of relative file paths to their git status
  */
 export async function getGitStatus(projectPath: string): Promise<GitStatusInfo> {
-    if (!isGitRepo(projectPath)) {
+    if (!await isGitRepo(projectPath)) {
         return {
             isGitRepo: false,
             hasRemote: false,
@@ -52,31 +55,49 @@ export async function getGitStatus(projectPath: string): Promise<GitStatusInfo> 
     const fileStatuses = new Map<string, GitFileStatus>();
 
     try {
+        // Determine git repo root and compute prefix for subfolder projects
+        const gitRoot = normalizePathSeparators((await git.revparse(['--show-toplevel'])).trim());
+        const absProject = normalizePathSeparators(path.resolve(projectPath));
+        const prefix = absProject === gitRoot ? '' : absProject.slice(gitRoot.length + 1) + '/';
+
+        // Helper: convert git-root-relative path to project-relative path
+        // Returns null if the file is outside this project subfolder
+        const toProjectRelative = (gitRelPath: string): string | null => {
+            const normalized = normalizePathSeparators(gitRelPath);
+            if (!prefix) return normalized;
+            if (normalized.startsWith(prefix)) return normalized.slice(prefix.length);
+            return null; // file outside this project
+        };
+
         // Get current status (uncommitted changes)
         const status: StatusResult = await git.status();
 
         // Mark untracked files
         for (const file of status.not_added) {
-            fileStatuses.set(normalizePathSeparators(file), 'untracked');
+            const rel = toProjectRelative(file);
+            if (rel !== null) fileStatuses.set(rel, 'untracked');
         }
 
         // Mark modified/staged files (not yet committed)
         for (const file of status.modified) {
-            fileStatuses.set(normalizePathSeparators(file), 'modified');
+            const rel = toProjectRelative(file);
+            if (rel !== null) fileStatuses.set(rel, 'modified');
         }
         for (const file of status.staged) {
-            // Staged but not yet committed = still modified
-            fileStatuses.set(normalizePathSeparators(file), 'modified');
+            const rel = toProjectRelative(file);
+            if (rel !== null) fileStatuses.set(rel, 'modified');
         }
         for (const file of status.created) {
-            // New staged files
-            fileStatuses.set(normalizePathSeparators(file), 'modified');
+            const rel = toProjectRelative(file);
+            if (rel !== null) fileStatuses.set(rel, 'modified');
         }
         for (const file of status.deleted) {
-            fileStatuses.set(normalizePathSeparators(file), 'modified');
+            const rel = toProjectRelative(file);
+            if (rel !== null) fileStatuses.set(rel, 'modified');
         }
         for (const file of status.renamed.map(r => r.to)) {
-            fileStatuses.set(normalizePathSeparators(file), 'modified');
+            const rel = toProjectRelative(file);
+            if (rel !== null) fileStatuses.set(rel, 'modified');
         }
 
         // Check if remote exists
@@ -108,10 +129,10 @@ export async function getGitStatus(projectPath: string): Promise<GitStatusInfo> 
                         const diff = (commit as unknown as { diff?: { files: Array<{ file: string }> } }).diff;
                         if (diff?.files) {
                             for (const file of diff.files) {
-                                const normalizedPath = normalizePathSeparators(file.file);
+                                const rel = toProjectRelative(file.file);
                                 // Only mark as committed if not already modified/untracked
-                                if (!fileStatuses.has(normalizedPath)) {
-                                    fileStatuses.set(normalizedPath, 'committed');
+                                if (rel !== null && !fileStatuses.has(rel)) {
+                                    fileStatuses.set(rel, 'committed');
                                 }
                             }
                         }
@@ -121,9 +142,9 @@ export async function getGitStatus(projectPath: string): Promise<GitStatusInfo> 
                     const diffOutput = await git.diff(['--name-only', trackingBranch, 'HEAD']);
                     if (diffOutput) {
                         for (const file of diffOutput.split('\n').filter(f => f.trim())) {
-                            const normalizedPath = normalizePathSeparators(file);
-                            if (!fileStatuses.has(normalizedPath)) {
-                                fileStatuses.set(normalizedPath, 'committed');
+                            const rel = toProjectRelative(file);
+                            if (rel !== null && !fileStatuses.has(rel)) {
+                                fileStatuses.set(rel, 'committed');
                             }
                         }
                     }

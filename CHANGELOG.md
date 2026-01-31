@@ -2,6 +2,14 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.4.1] - 2026-01-31
+
+### Fixed
+- **Git Status for Subfolder Projects**: Viewer now correctly shows git status for projects that are subdirectories of a git repo (e.g., a library inside a monorepo)
+  - `isGitRepo()` now uses `simpleGit().checkIsRepo()` instead of checking for `.git` directory — traverses parent dirs
+  - New `toProjectRelative()` helper maps git-root-relative paths to project-relative paths
+  - Files outside the project subfolder are properly filtered out
+
 ## [1.4.0] - 2026-01-31
 
 ### Breaking Changes
