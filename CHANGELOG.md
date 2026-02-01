@@ -2,6 +2,12 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.6.1] - 2026-02-01
+
+### Fixed
+- **MCP Server version**: Now reads version dynamically from package.json (was hardcoded to 1.3.0)
+- **`aidex setup` for local installs**: Detects if `aidex` is globally available; falls back to `node /full/path/index.js` when not installed globally
+
 ## [1.6.0] - 2026-02-01
 
 ### Added

@@ -6,9 +6,10 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { homedir, platform } from 'os';
 import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
 
 // ============================================================
 // Types
@@ -32,13 +33,22 @@ interface CliClientInfo {
 type ClientInfo = JsonClientInfo | CliClientInfo;
 
 // ============================================================
-// MCP Server Entry (for JSON-based clients)
+// MCP Server Command Detection
 // ============================================================
 
-const AIDEX_MCP_ENTRY = {
-    command: 'aidex',
-    args: [] as string[]
-};
+function getServerCommand(): { command: string; args: string[] } {
+    // Check if 'aidex' is available as a global command
+    try {
+        execSync(platform() === 'win32' ? 'where aidex' : 'which aidex', { stdio: 'pipe', timeout: 3000 });
+        return { command: 'aidex', args: [] };
+    } catch {
+        // Not globally installed - use node with full path to index.js
+    }
+
+    const thisFile = fileURLToPath(import.meta.url);
+    const indexJs = resolve(dirname(thisFile), '..', 'index.js');
+    return { command: process.execPath, args: [indexJs] };
+}
 
 // ============================================================
 // CLAUDE.md Instructions Block
@@ -102,11 +112,13 @@ function getClients(): ClientInfo[] {
     const clients: ClientInfo[] = [];
 
     // Claude Code - uses its own CLI for MCP management
+    const serverCmd = getServerCommand();
+    const cliAddCmd = ['claude', 'mcp', 'add', '--scope', 'user', 'aidex', '--', serverCmd.command, ...serverCmd.args];
     clients.push({
         type: 'cli',
         name: 'Claude Code',
         detectCmd: 'claude --version',
-        addCmd: ['claude', 'mcp', 'add', '--scope', 'user', 'aidex', '--', 'aidex'],
+        addCmd: cliAddCmd,
         removeCmd: ['claude', 'mcp', 'remove', '--scope', 'user', 'aidex']
     });
 
@@ -313,7 +325,8 @@ function setupJsonClient(client: JsonClientInfo): { status: string; registered: 
     if (!data.mcpServers || typeof data.mcpServers !== 'object') {
         data.mcpServers = {};
     }
-    (data.mcpServers as Record<string, unknown>).aidex = { ...AIDEX_MCP_ENTRY };
+    const serverCmd = getServerCommand();
+    (data.mcpServers as Record<string, unknown>).aidex = { ...serverCmd };
 
     const writeResult = writeJsonConfig(client.configPath, data);
     if (!writeResult.success) {

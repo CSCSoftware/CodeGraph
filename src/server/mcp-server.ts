@@ -9,13 +9,13 @@ import {
     ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { registerTools, handleToolCall } from './tools.js';
-import { PRODUCT_NAME, PRODUCT_NAME_LOWER } from '../constants.js';
+import { PRODUCT_NAME, PRODUCT_NAME_LOWER, PRODUCT_VERSION } from '../constants.js';
 
 export function createServer() {
     const server = new Server(
         {
             name: PRODUCT_NAME_LOWER,
-            version: '1.3.0',
+            version: PRODUCT_VERSION,
         },
         {
             capabilities: {
