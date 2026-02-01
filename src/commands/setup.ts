@@ -1,7 +1,7 @@
 /**
  * AiDex Setup - Auto-register as MCP server in AI clients
  *
- * Supports: Claude Code (via CLI), Claude Desktop, Cursor, Windsurf
+ * Supports: Claude Code (via CLI), Claude Desktop, Cursor, Windsurf, Gemini CLI, VS Code Copilot
  * Also installs CLAUDE.md instructions for Claude Code/Desktop.
  */
 
@@ -20,6 +20,8 @@ interface JsonClientInfo {
     name: string;
     configPath: string;
     detectDir: string;
+    serversKey?: string;      // default: 'mcpServers'
+    extraFields?: Record<string, string>;  // extra fields per entry, e.g. { type: 'stdio' }
 }
 
 interface CliClientInfo {
@@ -163,6 +165,45 @@ function getClients(): ClientInfo[] {
         detectDir: join(home, '.codeium', 'windsurf')
     });
 
+    // Gemini CLI - JSON config (always uses ~/.gemini/ on all platforms)
+    clients.push({
+        type: 'json',
+        name: 'Gemini CLI',
+        configPath: join(home, '.gemini', 'settings.json'),
+        detectDir: join(home, '.gemini')
+    });
+
+    // VS Code Copilot - JSON config (uses "servers" key + "type": "stdio")
+    if (plat === 'win32') {
+        const appData = process.env.APPDATA || join(home, 'AppData', 'Roaming');
+        clients.push({
+            type: 'json',
+            name: 'VS Code',
+            configPath: join(appData, 'Code', 'User', 'mcp.json'),
+            detectDir: join(appData, 'Code', 'User'),
+            serversKey: 'servers',
+            extraFields: { type: 'stdio' }
+        });
+    } else if (plat === 'darwin') {
+        clients.push({
+            type: 'json',
+            name: 'VS Code',
+            configPath: join(home, 'Library', 'Application Support', 'Code', 'User', 'mcp.json'),
+            detectDir: join(home, 'Library', 'Application Support', 'Code', 'User'),
+            serversKey: 'servers',
+            extraFields: { type: 'stdio' }
+        });
+    } else {
+        clients.push({
+            type: 'json',
+            name: 'VS Code',
+            configPath: join(home, '.config', 'Code', 'User', 'mcp.json'),
+            detectDir: join(home, '.config', 'Code', 'User'),
+            serversKey: 'servers',
+            extraFields: { type: 'stdio' }
+        });
+    }
+
     return clients;
 }
 
@@ -219,53 +260,70 @@ function writeJsonConfig(filePath: string, data: Record<string, unknown>): { suc
 }
 
 // ============================================================
-// CLAUDE.md Management
+// AI Instructions Management (CLAUDE.md, GEMINI.md)
 // ============================================================
 
-function getClaudeMdPath(): string {
-    return join(homedir(), '.claude', 'CLAUDE.md');
+interface InstructionFile {
+    name: string;
+    path: string;
+    detectDir: string;
 }
 
-function installClaudeMd(): { success: boolean; action: string } {
-    const mdPath = getClaudeMdPath();
-    const dir = dirname(mdPath);
+function getInstructionFiles(): InstructionFile[] {
+    const home = homedir();
+    return [
+        {
+            name: 'CLAUDE.md',
+            path: join(home, '.claude', 'CLAUDE.md'),
+            detectDir: join(home, '.claude')
+        },
+        {
+            name: 'GEMINI.md',
+            path: join(home, '.gemini', 'GEMINI.md'),
+            detectDir: join(home, '.gemini')
+        }
+    ];
+}
 
-    // Ensure directory exists
+function installInstructionFile(file: InstructionFile): { success: boolean; action: string } {
+    if (!existsSync(file.detectDir)) {
+        return { success: true, action: 'skipped (not installed)' };
+    }
+
+    const dir = dirname(file.path);
     if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
     }
 
     let content = '';
-    if (existsSync(mdPath)) {
-        content = readFileSync(mdPath, 'utf8');
+    if (existsSync(file.path)) {
+        content = readFileSync(file.path, 'utf8');
 
         // Already has AiDex block? Replace it
         if (content.includes(CLAUDE_MD_START)) {
             const regex = new RegExp(`${CLAUDE_MD_START}[\\s\\S]*?${CLAUDE_MD_END}`, 'g');
             content = content.replace(regex, CLAUDE_MD_BLOCK);
-            writeFileSync(mdPath, content, 'utf8');
+            writeFileSync(file.path, content, 'utf8');
             return { success: true, action: 'updated' };
         }
 
         // Append to existing file
         content = content.trimEnd() + '\n\n' + CLAUDE_MD_BLOCK + '\n';
-        writeFileSync(mdPath, content, 'utf8');
+        writeFileSync(file.path, content, 'utf8');
         return { success: true, action: 'appended' };
     }
 
     // Create new file
-    writeFileSync(mdPath, CLAUDE_MD_BLOCK + '\n', 'utf8');
+    writeFileSync(file.path, CLAUDE_MD_BLOCK + '\n', 'utf8');
     return { success: true, action: 'created' };
 }
 
-function uninstallClaudeMd(): { success: boolean; removed: boolean } {
-    const mdPath = getClaudeMdPath();
-
-    if (!existsSync(mdPath)) {
+function uninstallInstructionFile(file: InstructionFile): { success: boolean; removed: boolean } {
+    if (!existsSync(file.path)) {
         return { success: true, removed: false };
     }
 
-    let content = readFileSync(mdPath, 'utf8');
+    let content = readFileSync(file.path, 'utf8');
 
     if (!content.includes(CLAUDE_MD_START)) {
         return { success: true, removed: false };
@@ -275,10 +333,9 @@ function uninstallClaudeMd(): { success: boolean; removed: boolean } {
     content = content.replace(regex, '').trim();
 
     if (content.length === 0) {
-        // File would be empty, but don't delete it - might have been user-created
-        writeFileSync(mdPath, '', 'utf8');
+        writeFileSync(file.path, '', 'utf8');
     } else {
-        writeFileSync(mdPath, content + '\n', 'utf8');
+        writeFileSync(file.path, content + '\n', 'utf8');
     }
 
     return { success: true, removed: true };
@@ -322,11 +379,13 @@ function setupJsonClient(client: JsonClientInfo): { status: string; registered: 
         data = {};
     }
 
-    if (!data.mcpServers || typeof data.mcpServers !== 'object') {
-        data.mcpServers = {};
+    const key = client.serversKey || 'mcpServers';
+    if (!data[key] || typeof data[key] !== 'object') {
+        data[key] = {};
     }
     const serverCmd = getServerCommand();
-    (data.mcpServers as Record<string, unknown>).aidex = { ...serverCmd };
+    const entry: Record<string, unknown> = { ...client.extraFields, ...serverCmd };
+    (data[key] as Record<string, unknown>).aidex = entry;
 
     const writeResult = writeJsonConfig(client.configPath, data);
     if (!writeResult.success) {
@@ -354,12 +413,15 @@ export function setupMcpClients(): void {
         if (result.registered) registered++;
     }
 
-    // Install CLAUDE.md instructions
+    // Install AI instruction files
     console.log('\n  AI Instructions:');
-    const mdResult = installClaudeMd();
-    const mdPath = getClaudeMdPath();
-    if (mdResult.success) {
-        console.log(`  ✓ CLAUDE.md (${mdResult.action}: ${mdPath})`);
+    for (const file of getInstructionFiles()) {
+        const mdResult = installInstructionFile(file);
+        if (mdResult.action === 'skipped (not installed)') {
+            console.log(`  - ${file.name} (client not installed)`);
+        } else if (mdResult.success) {
+            console.log(`  ✓ ${file.name} (${mdResult.action}: ${file.path})`);
+        }
     }
 
     console.log(`\nRegistered AiDex with ${registered} client(s).\n`);
@@ -401,7 +463,8 @@ function unsetupJsonClient(client: JsonClientInfo): { status: string; removed: b
     }
 
     const data = config.data as Record<string, unknown>;
-    const servers = data.mcpServers as Record<string, unknown> | undefined;
+    const key = client.serversKey || 'mcpServers';
+    const servers = data[key] as Record<string, unknown> | undefined;
 
     if (!servers || !servers.aidex) {
         return { status: `  - ${client.name} (not registered)`, removed: false };
@@ -435,13 +498,15 @@ export function unsetupMcpClients(): void {
         if (result.removed) removed++;
     }
 
-    // Remove CLAUDE.md instructions
+    // Remove AI instruction files
     console.log('\n  AI Instructions:');
-    const mdResult = uninstallClaudeMd();
-    if (mdResult.removed) {
-        console.log(`  ✓ Removed AiDex block from CLAUDE.md`);
-    } else {
-        console.log(`  - CLAUDE.md (no AiDex block found)`);
+    for (const file of getInstructionFiles()) {
+        const mdResult = uninstallInstructionFile(file);
+        if (mdResult.removed) {
+            console.log(`  ✓ Removed AiDex block from ${file.name}`);
+        } else {
+            console.log(`  - ${file.name} (no AiDex block found)`);
+        }
     }
 
     console.log(`\nUnregistered AiDex from ${removed} client(s).\n`);
