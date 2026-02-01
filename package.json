@@ -1,6 +1,7 @@
 {
   "name": "aidex-mcp",
-  "version": "1.7.1",
+  "version": "1.7.3",
+  "mcpName": "io.github.CSCSoftware/aidex",
   "description": "MCP Server for persistent code indexing. Gives AI assistants (Claude, Gemini, Copilot, Cursor) instant access to your codebase. 50x less context than grep.",
   "main": "build/index.js",
   "bin": {
@@ -53,6 +54,10 @@
     "method-signatures",
     "cross-project"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CSCSoftware/AiDex.git"
+  },
   "author": "Uwe Chalas",
   "license": "MIT",
   "dependencies": {

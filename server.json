@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.CSCSoftware/aidex",
+  "description": "Persistent code indexing for AI assistants. 50x less context than grep. 11 languages.",
+  "repository": {
+    "url": "https://github.com/CSCSoftware/AiDex",
+    "source": "github"
+  },
+  "version": "1.7.3",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "aidex-mcp",
+      "version": "1.7.3",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
