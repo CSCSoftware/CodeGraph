@@ -9,7 +9,7 @@
 
 AiDex is an MCP server that gives AI coding assistants instant access to your entire codebase through a persistent, pre-built index. Works with any MCP-compatible AI assistant: Claude Code, Claude Desktop, Cursor, Windsurf, Gemini CLI, VS Code Copilot, and more.
 
-<!-- TODO: Add demo GIF showing aidex_query vs grep -->
+![AiDex Demo - grep vs aidex](docs/aidex-demo.gif)
 
 ## The Problem
 
@@ -282,6 +282,10 @@ Opens `http://localhost:3333` with:
 - **File signatures** - Click any file to see its types and methods
 - **Live reload** - Changes detected automatically while you code
 - **Git status icons** - See which files are modified, staged, or untracked
+
+![AiDex Viewer - Signatures](docs/aidex-viewer.png)
+
+![AiDex Viewer - Code](docs/aidex-viewer-code.png)
 
 Close with `aidex_viewer({ path: ".", action: "close" })`
 
