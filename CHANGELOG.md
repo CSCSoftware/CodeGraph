@@ -2,6 +2,15 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.6.0] - 2026-02-01
+
+### Added
+- **Auto CLAUDE.md instructions**: `aidex setup` now installs AI instructions in `~/.claude/CLAUDE.md`
+  - Tells Claude to auto-run `aidex_init` when no `.aidex/` exists
+  - Provides tool usage guide (prefer AiDex over Grep/Glob)
+  - `aidex unsetup` cleanly removes the instructions block
+- **Idempotent setup**: Re-running `aidex setup` updates existing config without errors
+
 ## [1.5.2] - 2026-02-01
 
 ### Fixed
