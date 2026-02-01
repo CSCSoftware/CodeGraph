@@ -7,7 +7,7 @@
 
 **Stop wasting 80% of your AI's context window on code searches.**
 
-AiDex is an MCP server that gives AI coding assistants instant access to your entire codebase through a persistent, pre-built index. Works with any MCP-compatible AI assistant: Claude Code, Cursor, Windsurf, Continue.dev, and more.
+AiDex is an MCP server that gives AI coding assistants instant access to your entire codebase through a persistent, pre-built index. Works with any MCP-compatible AI assistant: Claude Code, Claude Desktop, Cursor, Windsurf, Gemini CLI, VS Code Copilot, and more.
 
 <!-- TODO: Add demo GIF showing aidex_query vs grep -->
 
@@ -113,7 +113,7 @@ npm install -g aidex-mcp
 aidex setup
 ```
 
-`aidex setup` automatically detects and registers AiDex with your installed AI clients (Claude Code, Claude Desktop, Cursor, Windsurf). To unregister: `aidex unsetup`.
+`aidex setup` automatically detects and registers AiDex with your installed AI clients (Claude Code, Claude Desktop, Cursor, Windsurf, Gemini CLI, VS Code Copilot). To unregister: `aidex unsetup`.
 
 ### 2. Or register manually with your AI assistant
 
@@ -144,6 +144,29 @@ aidex setup
 > **Note:** Both `aidex` and `aidex-mcp` work as command names.
 
 > **Important:** The server name in your config determines the MCP tool prefix. Use `"aidex"` as shown above — this gives you tool names like `aidex_query`, `aidex_signature`, etc. Using a different name (e.g., `"codegraph"`) would change the prefix accordingly.
+
+**For Gemini CLI** (`~/.gemini/settings.json`):
+```json
+{
+  "mcpServers": {
+    "aidex": {
+      "command": "aidex"
+    }
+  }
+}
+```
+
+**For VS Code Copilot** (run `MCP: Open User Configuration` in Command Palette):
+```json
+{
+  "servers": {
+    "aidex": {
+      "type": "stdio",
+      "command": "aidex"
+    }
+  }
+}
+```
 
 **For other MCP clients**: See your client's documentation for MCP server configuration.
 

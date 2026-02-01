@@ -2,6 +2,16 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.7.0] - 2026-02-01
+
+### Added
+- **Gemini CLI support**: `aidex setup` now detects and registers AiDex with Gemini CLI (`~/.gemini/settings.json`)
+- **VS Code Copilot support**: `aidex setup` now detects and registers AiDex with VS Code (`mcp.json` with `"servers"` key and `"type": "stdio"`)
+
+### Changed
+- JSON client config is now flexible: supports custom server key (`serversKey`) and extra fields (`extraFields`) per client
+- Updated README with Gemini CLI and VS Code Copilot config examples
+
 ## [1.6.1] - 2026-02-01
 
 ### Fixed
