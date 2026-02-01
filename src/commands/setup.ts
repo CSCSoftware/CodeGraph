@@ -2,10 +2,11 @@
  * AiDex Setup - Auto-register as MCP server in AI clients
  *
  * Supports: Claude Code (via CLI), Claude Desktop, Cursor, Windsurf
+ * Also installs CLAUDE.md instructions for Claude Code/Desktop.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 import { homedir, platform } from 'os';
 import { execSync } from 'child_process';
 
@@ -38,6 +39,58 @@ const AIDEX_MCP_ENTRY = {
     command: 'aidex',
     args: [] as string[]
 };
+
+// ============================================================
+// CLAUDE.md Instructions Block
+// ============================================================
+
+const CLAUDE_MD_START = '<!-- AIDEX-START -->';
+const CLAUDE_MD_END = '<!-- AIDEX-END -->';
+
+const CLAUDE_MD_BLOCK = `${CLAUDE_MD_START}
+## AiDex - Persistent Code Index (MCP Server)
+
+AiDex provides fast, precise code search through a pre-built index. **Always prefer AiDex over Grep/Glob for code searches.**
+
+### Auto-Init Rule
+
+**At the start of every session, check if \`.aidex/\` exists in the project directory.**
+- If \`.aidex/\` does NOT exist → **automatically run \`aidex_init\`** to create the index. Do not ask, just do it.
+- If \`.aidex/\` exists → use AiDex tools for all code searches.
+
+### When to Use AiDex (instead of Grep/Glob)
+
+| Task | Do NOT use | Use instead |
+|------|-----------|-------------|
+| Find a function/class/variable | \`Grep pattern="name"\` | \`aidex_query term="name"\` |
+| See all methods in a file | \`Read entire_file.cs\` | \`aidex_signature file="..."\` |
+| Explore multiple files | Multiple Read calls | \`aidex_signatures pattern="src/**"\` |
+| Project overview | Many Glob/Read calls | \`aidex_summary\` + \`aidex_tree\` |
+| What changed recently? | \`git log\` + Read | \`aidex_query term="X" modified_since="2h"\` |
+
+### Available Tools
+
+| Tool | Purpose |
+|------|---------|
+| \`aidex_init\` | Index a project (creates \`.aidex/\`) |
+| \`aidex_query\` | Search by term (exact/contains/starts_with) |
+| \`aidex_signature\` | Get one file's classes + methods |
+| \`aidex_signatures\` | Get signatures for multiple files (glob) |
+| \`aidex_update\` | Re-index a single changed file |
+| \`aidex_summary\` | Project overview with entry points |
+| \`aidex_tree\` | File tree with statistics |
+| \`aidex_files\` | List project files by type |
+| \`aidex_session\` | Start session, detect external changes |
+| \`aidex_note\` | Read/write session notes |
+| \`aidex_viewer\` | Open interactive project tree in browser |
+
+### Why AiDex over Grep?
+
+- **~50 tokens** per search vs 2000+ with Grep
+- **Identifiers only** - no noise from comments/strings
+- **Persistent** - index survives between sessions
+- **Structure-aware** - knows methods, classes, types
+${CLAUDE_MD_END}`;
 
 // ============================================================
 // Client Detection
@@ -154,6 +207,72 @@ function writeJsonConfig(filePath: string, data: Record<string, unknown>): { suc
 }
 
 // ============================================================
+// CLAUDE.md Management
+// ============================================================
+
+function getClaudeMdPath(): string {
+    return join(homedir(), '.claude', 'CLAUDE.md');
+}
+
+function installClaudeMd(): { success: boolean; action: string } {
+    const mdPath = getClaudeMdPath();
+    const dir = dirname(mdPath);
+
+    // Ensure directory exists
+    if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+    }
+
+    let content = '';
+    if (existsSync(mdPath)) {
+        content = readFileSync(mdPath, 'utf8');
+
+        // Already has AiDex block? Replace it
+        if (content.includes(CLAUDE_MD_START)) {
+            const regex = new RegExp(`${CLAUDE_MD_START}[\\s\\S]*?${CLAUDE_MD_END}`, 'g');
+            content = content.replace(regex, CLAUDE_MD_BLOCK);
+            writeFileSync(mdPath, content, 'utf8');
+            return { success: true, action: 'updated' };
+        }
+
+        // Append to existing file
+        content = content.trimEnd() + '\n\n' + CLAUDE_MD_BLOCK + '\n';
+        writeFileSync(mdPath, content, 'utf8');
+        return { success: true, action: 'appended' };
+    }
+
+    // Create new file
+    writeFileSync(mdPath, CLAUDE_MD_BLOCK + '\n', 'utf8');
+    return { success: true, action: 'created' };
+}
+
+function uninstallClaudeMd(): { success: boolean; removed: boolean } {
+    const mdPath = getClaudeMdPath();
+
+    if (!existsSync(mdPath)) {
+        return { success: true, removed: false };
+    }
+
+    let content = readFileSync(mdPath, 'utf8');
+
+    if (!content.includes(CLAUDE_MD_START)) {
+        return { success: true, removed: false };
+    }
+
+    const regex = new RegExp(`\\n?\\n?${CLAUDE_MD_START}[\\s\\S]*?${CLAUDE_MD_END}\\n?`, 'g');
+    content = content.replace(regex, '').trim();
+
+    if (content.length === 0) {
+        // File would be empty, but don't delete it - might have been user-created
+        writeFileSync(mdPath, '', 'utf8');
+    } else {
+        writeFileSync(mdPath, content + '\n', 'utf8');
+    }
+
+    return { success: true, removed: true };
+}
+
+// ============================================================
 // Setup
 // ============================================================
 
@@ -165,9 +284,14 @@ function setupCliClient(client: CliClientInfo): { status: string; registered: bo
     const result = runCmd(client.addCmd);
     if (result.success) {
         return { status: `  ✓ ${client.name}`, registered: true };
-    } else {
-        return { status: `  ✗ ${client.name} (${result.error})`, registered: false };
     }
+
+    // "already exists" is not an error
+    if (result.error && result.error.includes('already exists')) {
+        return { status: `  ✓ ${client.name} (already registered)`, registered: true };
+    }
+
+    return { status: `  ✗ ${client.name} (${result.error})`, registered: false };
 }
 
 function setupJsonClient(client: JsonClientInfo): { status: string; registered: boolean } {
@@ -206,6 +330,8 @@ export function setupMcpClients(): void {
     console.log('\nAiDex MCP Server Registration');
     console.log('==============================\n');
 
+    // Register with AI clients
+    console.log('  MCP Servers:');
     for (const client of clients) {
         const result = client.type === 'cli'
             ? setupCliClient(client)
@@ -213,6 +339,14 @@ export function setupMcpClients(): void {
 
         console.log(result.status);
         if (result.registered) registered++;
+    }
+
+    // Install CLAUDE.md instructions
+    console.log('\n  AI Instructions:');
+    const mdResult = installClaudeMd();
+    const mdPath = getClaudeMdPath();
+    if (mdResult.success) {
+        console.log(`  ✓ CLAUDE.md (${mdResult.action}: ${mdPath})`);
     }
 
     console.log(`\nRegistered AiDex with ${registered} client(s).\n`);
@@ -277,6 +411,8 @@ export function unsetupMcpClients(): void {
     console.log('\nAiDex MCP Server Unregistration');
     console.log('================================\n');
 
+    // Unregister from AI clients
+    console.log('  MCP Servers:');
     for (const client of clients) {
         const result = client.type === 'cli'
             ? unsetupCliClient(client)
@@ -284,6 +420,15 @@ export function unsetupMcpClients(): void {
 
         console.log(result.status);
         if (result.removed) removed++;
+    }
+
+    // Remove CLAUDE.md instructions
+    console.log('\n  AI Instructions:');
+    const mdResult = uninstallClaudeMd();
+    if (mdResult.removed) {
+        console.log(`  ✓ Removed AiDex block from CLAUDE.md`);
+    } else {
+        console.log(`  - CLAUDE.md (no AiDex block found)`);
     }
 
     console.log(`\nUnregistered AiDex from ${removed} client(s).\n`);
