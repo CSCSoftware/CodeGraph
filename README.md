@@ -9,7 +9,14 @@
 
 AiDex is an MCP server that gives AI coding assistants instant access to your entire codebase through a persistent, pre-built index. Works with any MCP-compatible AI assistant: Claude Code, Claude Desktop, Cursor, Windsurf, Gemini CLI, VS Code Copilot, and more.
 
-![AiDex Demo - grep vs aidex](docs/aidex-demo.gif)
+![AiDex Demo - grep vs aidex](docs/aidex-demo.png)
+
+<details>
+<summary>Animated version</summary>
+
+![AiDex Demo GIF](docs/aidex-demo.gif)
+
+</details>
 
 ## The Problem
 
