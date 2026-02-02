@@ -46,8 +46,8 @@ const EXTENSION_MAP: Record<string, SupportedLanguage> = {
     '.rake': 'ruby',
 };
 
-// Cached parsers per language
-const parsers: Map<SupportedLanguage, Parser> = new Map();
+// Cached parsers per language (includes 'tsx' and 'jsx' as virtual keys)
+const parsers: Map<string, Parser> = new Map();
 
 /**
  * Get or create a parser for the given language
@@ -138,12 +138,47 @@ export function parse(sourceCode: string, language: SupportedLanguage): Parser.T
 }
 
 /**
+ * Get the grammar key for a file path (handles tsx/jsx separately)
+ */
+function getGrammarKey(filePath: string): string | null {
+    const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
+    if (ext === '.tsx') return 'tsx';
+    if (ext === '.jsx') return 'jsx';
+    const lang = detectLanguage(filePath);
+    return lang;
+}
+
+/**
+ * Get or create a parser for a specific grammar key (tsx, jsx, or SupportedLanguage)
+ */
+function getParserForGrammar(grammarKey: string): Parser {
+    let parser = parsers.get(grammarKey);
+    if (parser) return parser;
+
+    parser = new Parser();
+    switch (grammarKey) {
+        case 'tsx':
+            parser.setLanguage(TypeScript.tsx);
+            break;
+        case 'jsx':
+            parser.setLanguage(TypeScript.tsx); // tsx grammar handles JSX too
+            break;
+        default:
+            return getParser(grammarKey as SupportedLanguage);
+    }
+
+    parsers.set(grammarKey, parser);
+    return parser;
+}
+
+/**
  * Parse a file's content with auto-detected language
  */
 export function parseFile(sourceCode: string, filePath: string): Parser.Tree | null {
-    const language = detectLanguage(filePath);
-    if (!language) {
+    const grammarKey = getGrammarKey(filePath);
+    if (!grammarKey) {
         return null;
     }
-    return parse(sourceCode, language);
+    const parser = getParserForGrammar(grammarKey);
+    return parser.parse(sourceCode, undefined, { bufferSize: PARSE_BUFFER_SIZE });
 }

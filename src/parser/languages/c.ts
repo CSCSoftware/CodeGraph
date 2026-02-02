@@ -61,7 +61,6 @@ export const C_COMMENT_NODES = new Set([
  */
 export const C_METHOD_NODES = new Set([
     'function_definition',
-    'function_declarator',
 ]);
 
 /**

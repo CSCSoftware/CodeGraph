@@ -136,8 +136,7 @@ export function task(params: TaskParams): TaskResult {
         };
     }
 
-    const isRead = action === 'read';
-    const db = openDatabase(dbPath, isRead);
+    const db = openDatabase(dbPath, false);
 
     try {
         ensureTaskTables(db);

@@ -9,6 +9,14 @@ import { createHash } from 'crypto';
 import { minimatch } from 'minimatch';
 import { INDEX_DIR } from '../constants.js';
 
+/**
+ * Compute a short (16-char) SHA256 hash of content.
+ * Used consistently across init, update, and session for file/line hashing.
+ */
+export function shortHash(content: Buffer | string): string {
+    return createHash('sha256').update(content).digest('hex').substring(0, 16);
+}
+
 import { createDatabase, createQueries, type AiDexDatabase, type Queries } from '../db/index.js';
 import { extract, getSupportedExtensions } from '../parser/index.js';
 
@@ -395,7 +403,7 @@ function indexFile(
     }
 
     // Calculate hash
-    const hash = createHash('sha256').update(content).digest('hex').substring(0, 16);
+    const hash = shortHash(content);
 
     // In incremental mode, skip unchanged files
     if (incremental) {
@@ -439,7 +447,7 @@ function indexFile(
     let lineId = 1;
     for (const line of extraction.lines) {
         const lineContent = contentLines[line.lineNumber - 1] ?? '';
-        const lineHash = createHash('sha256').update(lineContent).digest('hex').substring(0, 16);
+        const lineHash = shortHash(lineContent);
         queries.insertLine(fileId, lineId++, line.lineNumber, line.lineType, lineHash, now);
     }
 
@@ -458,7 +466,7 @@ function indexFile(
             // Line wasn't recorded, add it now
             const newLineId = lineId++;
             const lineContent = contentLines[item.lineNumber - 1] ?? '';
-            const lineHash = createHash('sha256').update(lineContent).digest('hex').substring(0, 16);
+            const lineHash = shortHash(lineContent);
             queries.insertLine(fileId, newLineId, item.lineNumber, item.lineType, lineHash, now);
             lineNumberToId.set(item.lineNumber, newLineId);
         }

@@ -14,6 +14,7 @@ import { createServer } from './server/mcp-server.js';
 import { scan, init } from './commands/index.js';
 import { setupMcpClients, unsetupMcpClients } from './commands/setup.js';
 import { PRODUCT_NAME, PRODUCT_NAME_LOWER } from './constants.js';
+import { stopViewer } from './viewer/server.js';
 
 async function main() {
     const args = process.argv.slice(2);
@@ -91,6 +92,15 @@ async function main() {
 
     // Default: Start MCP server
     const server = createServer();
+
+    // Graceful shutdown handlers
+    const shutdown = () => {
+        stopViewer();
+        process.exit(0);
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+
     await server.start();
 }
 

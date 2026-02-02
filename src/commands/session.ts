@@ -14,7 +14,7 @@ import { minimatch } from 'minimatch';
 import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase, createQueries } from '../db/index.js';
 import { update } from './update.js';
-import { DEFAULT_EXCLUDE, readGitignore } from './init.js';
+import { DEFAULT_EXCLUDE, readGitignore, shortHash } from './init.js';
 
 // ============================================================
 // Types
@@ -257,7 +257,7 @@ function detectExternalChanges(projectPath: string, queries: ReturnType<typeof c
         // Check if file hash changed
         try {
             const content = readFileSync(fullPath);
-            const currentHash = createHash('sha256').update(content).digest('hex');
+            const currentHash = shortHash(content);
 
             if (currentHash !== file.hash) {
                 changes.push({ path: file.path, reason: 'modified' });

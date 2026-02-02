@@ -34,3 +34,12 @@ SampleLangProjects/
 
 # Local Claude settings
 .claude/settings.local.json
+
+# Token/credential files
+.mcpregistry_*
+
+# Windows nul artifact
+nul
+
+# Code review (local only)
+CODE-REVIEW.md

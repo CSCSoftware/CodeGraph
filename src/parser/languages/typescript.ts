@@ -81,6 +81,7 @@ export const TYPESCRIPT_METHOD_NODES = new Set([
  */
 export const TYPESCRIPT_TYPE_NODES = new Set([
     'class_declaration',
+    'abstract_class_declaration',
     'interface_declaration',
     'type_alias_declaration',
     'enum_declaration',

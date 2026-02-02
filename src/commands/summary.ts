@@ -9,7 +9,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
-import { openDatabase, createQueries } from '../db/index.js';
+import { openDatabase, createQueries, type AiDexDatabase } from '../db/index.js';
 
 // ============================================================
 // Types - Summary
@@ -103,7 +103,7 @@ export function summary(params: SummaryParams): SummaryResult {
         const entryPoints = detectEntryPoints(queries);
 
         // Get main types (most referenced)
-        const mainTypes = getMainTypes(queries);
+        const mainTypes = getMainTypes(queries, db);
 
         // Get file count
         const stats = db.getStats();
@@ -169,24 +169,56 @@ function detectEntryPoints(queries: ReturnType<typeof createQueries>): string[] 
 
 /**
  * Get main types (classes/interfaces with most methods)
+ * Uses bulk SQL queries instead of N+1 per-file queries.
+ * Methods are counted between a type's line_number and the next type's line_number in the same file.
  */
-function getMainTypes(queries: ReturnType<typeof createQueries>): string[] {
-    const files = queries.getAllFiles();
+function getMainTypes(queries: ReturnType<typeof createQueries>, db: AiDexDatabase): string[] {
+    const rawDb = db.getDb();
+
+    // Load ALL types and methods in two bulk queries
+    const allTypes = rawDb.prepare(
+        'SELECT t.file_id, t.name, t.line_number, f.path FROM types t JOIN files f ON t.file_id = f.id ORDER BY t.file_id, t.line_number'
+    ).all() as Array<{ file_id: number; name: string; line_number: number; path: string }>;
+
+    const allMethods = rawDb.prepare(
+        'SELECT file_id, line_number FROM methods ORDER BY file_id, line_number'
+    ).all() as Array<{ file_id: number; line_number: number }>;
+
+    // Group methods by file_id for fast lookup
+    const methodsByFile = new Map<number, number[]>();
+    for (const m of allMethods) {
+        let arr = methodsByFile.get(m.file_id);
+        if (!arr) {
+            arr = [];
+            methodsByFile.set(m.file_id, arr);
+        }
+        arr.push(m.line_number);
+    }
+
+    // Count methods per type: only count between this type's start and the next type's start
     const typeMethodCounts: Array<{ name: string; file: string; methodCount: number }> = [];
 
-    for (const file of files) {
-        const types = queries.getTypesByFile(file.id);
-        const methods = queries.getMethodsByFile(file.id);
+    for (let i = 0; i < allTypes.length; i++) {
+        const type = allTypes[i];
+        const nextType = (i + 1 < allTypes.length && allTypes[i + 1].file_id === type.file_id)
+            ? allTypes[i + 1]
+            : null;
 
-        for (const type of types) {
-            // Count methods that likely belong to this type (same file, after type definition)
-            const methodCount = methods.filter(m => m.line_number > type.line_number).length;
-            typeMethodCounts.push({
-                name: type.name,
-                file: file.path,
-                methodCount,
-            });
+        const fileMethods = methodsByFile.get(type.file_id);
+        if (!fileMethods) {
+            typeMethodCounts.push({ name: type.name, file: type.path, methodCount: 0 });
+            continue;
         }
+
+        const lowerBound = type.line_number;
+        const upperBound = nextType ? nextType.line_number : Infinity;
+
+        const methodCount = fileMethods.filter(ln => ln > lowerBound && ln < upperBound).length;
+        typeMethodCounts.push({
+            name: type.name,
+            file: type.path,
+            methodCount,
+        });
     }
 
     // Sort by method count and return top 5
@@ -210,6 +242,17 @@ function detectLanguages(queries: ReturnType<typeof createQueries>): string[] {
         '.rs': 'Rust',
         '.py': 'Python',
         '.pyw': 'Python',
+        '.c': 'C',
+        '.h': 'C/C++',
+        '.cpp': 'C++',
+        '.cc': 'C++',
+        '.cxx': 'C++',
+        '.hpp': 'C++',
+        '.hxx': 'C++',
+        '.java': 'Java',
+        '.go': 'Go',
+        '.php': 'PHP',
+        '.rb': 'Ruby',
     };
 
     const languages = new Set<string>();
@@ -262,6 +305,47 @@ export function tree(params: TreeParams): TreeResult {
             });
         }
 
+        // Pre-load stats in bulk if needed (avoids N+1 queries)
+        let statsMap: Map<number, { itemCount: number; methodCount: number; typeCount: number }> | null = null;
+        if (includeStats) {
+            const rawDb = db.getDb();
+            statsMap = new Map();
+
+            // Bulk load unique item counts per file
+            const itemCounts = rawDb.prepare(
+                'SELECT file_id, COUNT(DISTINCT item_id) as cnt FROM occurrences GROUP BY file_id'
+            ).all() as Array<{ file_id: number; cnt: number }>;
+            for (const row of itemCounts) {
+                statsMap.set(row.file_id, { itemCount: row.cnt, methodCount: 0, typeCount: 0 });
+            }
+
+            // Bulk load method counts per file
+            const methodCounts = rawDb.prepare(
+                'SELECT file_id, COUNT(*) as cnt FROM methods GROUP BY file_id'
+            ).all() as Array<{ file_id: number; cnt: number }>;
+            for (const row of methodCounts) {
+                const entry = statsMap.get(row.file_id);
+                if (entry) {
+                    entry.methodCount = row.cnt;
+                } else {
+                    statsMap.set(row.file_id, { itemCount: 0, methodCount: row.cnt, typeCount: 0 });
+                }
+            }
+
+            // Bulk load type counts per file
+            const typeCounts = rawDb.prepare(
+                'SELECT file_id, COUNT(*) as cnt FROM types GROUP BY file_id'
+            ).all() as Array<{ file_id: number; cnt: number }>;
+            for (const row of typeCounts) {
+                const entry = statsMap.get(row.file_id);
+                if (entry) {
+                    entry.typeCount = row.cnt;
+                } else {
+                    statsMap.set(row.file_id, { itemCount: 0, methodCount: 0, typeCount: row.cnt });
+                }
+            }
+        }
+
         // Build tree structure
         const directories = new Set<string>();
         const entries: TreeEntry[] = [];
@@ -297,14 +381,11 @@ export function tree(params: TreeParams): TreeResult {
                 type: 'file',
             };
 
-            if (includeStats) {
-                const occurrences = queries.getOccurrencesByFile(file.id);
-                const methods = queries.getMethodsByFile(file.id);
-                const types = queries.getTypesByFile(file.id);
-
-                entry.itemCount = new Set(occurrences.map(o => o.item_id)).size;
-                entry.methodCount = methods.length;
-                entry.typeCount = types.length;
+            if (statsMap) {
+                const fileStats = statsMap.get(file.id);
+                entry.itemCount = fileStats?.itemCount ?? 0;
+                entry.methodCount = fileStats?.methodCount ?? 0;
+                entry.typeCount = fileStats?.typeCount ?? 0;
             }
 
             entries.push(entry);

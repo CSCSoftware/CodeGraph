@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase, createQueries, type Queries } from '../db/index.js';
+import { globToRegex } from '../utils/glob.js';
 
 // ============================================================
 // Types
@@ -87,6 +88,9 @@ export function query(params: QueryParams): QueryResult {
         const modifiedSinceTs = params.modifiedSince ? parseTimeOffset(params.modifiedSince) : null;
         const modifiedBeforeTs = params.modifiedBefore ? parseTimeOffset(params.modifiedBefore) : null;
 
+        // Pre-compile file filter regex
+        const fileFilterRegex = params.fileFilter ? globToRegex(params.fileFilter) : null;
+
         // Collect all occurrences
         let allMatches: QueryMatch[] = [];
 
@@ -95,7 +99,7 @@ export function query(params: QueryParams): QueryResult {
 
             for (const occ of occurrences) {
                 // Apply file filter
-                if (params.fileFilter && !matchesGlob(occ.path, params.fileFilter)) {
+                if (fileFilterRegex && !fileFilterRegex.test(occ.path.replace(/\\/g, '/'))) {
                     continue;
                 }
 
@@ -210,27 +214,3 @@ export function parseTimeOffset(input: string): number | null {
     return null;
 }
 
-/**
- * Simple glob matching (supports * and ** patterns)
- * Handles patterns like "** /folder/** " correctly for paths starting with folder/
- */
-function matchesGlob(path: string, pattern: string): boolean {
-    // Normalize path separators
-    const normalizedPath = path.replace(/\\/g, '/');
-    const normalizedPattern = pattern.replace(/\\/g, '/');
-
-    // Convert glob to regex using placeholders to avoid interference
-    let regex = normalizedPattern
-        .replace(/\./g, '\\.')                          // Escape dots
-        .replace(/\*\*\//g, '<<<STARSTAR_SLASH>>>')     // **/ placeholder
-        .replace(/\/\*\*/g, '<<<SLASH_STARSTAR>>>')     // /** placeholder
-        .replace(/\*\*/g, '<<<STARSTAR>>>')             // standalone ** placeholder
-        .replace(/\*/g, '[^/]*')                        // * matches anything except /
-        .replace(/<<<STARSTAR_SLASH>>>/g, '(.*/)?')     // **/ = optional prefix ending with /
-        .replace(/<<<SLASH_STARSTAR>>>/g, '(/.*)?')     // /** = optional suffix starting with /
-        .replace(/<<<STARSTAR>>>/g, '.*');              // ** matches anything
-
-    regex = '^' + regex + '$';
-
-    return new RegExp(regex, 'i').test(normalizedPath);
-}

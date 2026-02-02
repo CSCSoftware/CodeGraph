@@ -9,7 +9,7 @@ import { init, query, signature, signatures, update, remove, summary, tree, desc
 import type { TaskRow } from '../db/index.js';
 import { openDatabase } from '../db/index.js';
 import { startViewer, stopViewer } from '../viewer/index.js';
-import { PRODUCT_NAME, PRODUCT_NAME_LOWER, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
+import { PRODUCT_NAME, PRODUCT_NAME_LOWER, PRODUCT_VERSION, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
 /**
  * Register all available tools
@@ -706,7 +706,7 @@ function handleStatus(args: Record<string, unknown>): { content: Array<{ type: s
                     type: 'text',
                     text: JSON.stringify({
                         status: 'running',
-                        version: '0.1.0',
+                        version: PRODUCT_VERSION,
                         message: `${PRODUCT_NAME} MCP server is running. Use ${TOOL_PREFIX}init to index a project.`,
                     }, null, 2),
                 },
