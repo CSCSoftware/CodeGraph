@@ -6,12 +6,12 @@
     "url": "https://github.com/CSCSoftware/AiDex",
     "source": "github"
   },
-  "version": "1.7.3",
+  "version": "1.8.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "aidex-mcp",
-      "version": "1.7.3",
+      "version": "1.8.0",
       "transport": {
         "type": "stdio"
       }
