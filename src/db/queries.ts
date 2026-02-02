@@ -526,7 +526,7 @@ export class Queries {
     }
 
     updateTask(id: number, fields: Partial<Pick<TaskRow, 'title' | 'description' | 'priority' | 'status' | 'tags' | 'source' | 'sort_order'>>): boolean {
-        const ALLOWED_FIELDS = new Set(['title', 'description', 'status', 'priority', 'tags', 'sort_order', 'completed_at']);
+        const ALLOWED_FIELDS = new Set(['title', 'description', 'status', 'priority', 'tags', 'source', 'sort_order', 'completed_at']);
         const sets: string[] = [];
         const values: unknown[] = [];
         for (const [key, value] of Object.entries(fields)) {

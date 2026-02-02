@@ -8,7 +8,6 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { createHash } from 'crypto';
 import { minimatch } from 'minimatch';
 import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
