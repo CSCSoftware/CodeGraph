@@ -13,6 +13,11 @@ SampleLangProjects/
 # Docs (README is included automatically)
 CODEGRAPH-SPEC.md
 IMPLEMENTATION-PLAN.md
+CODE-REVIEW.md
+FUTURE.md
+docs/posts/
+docs/*.gif
+docs/*.png
 
 # Scripts
 *.bat
@@ -23,6 +28,9 @@ IMPLEMENTATION-PLAN.md
 # Source maps and declaration maps
 *.d.ts.map
 *.js.map
+
+# Windows artifacts
+nul
 
 # IDE/OS
 .idea/
