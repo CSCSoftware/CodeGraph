@@ -10,9 +10,11 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { createHash } from 'crypto';
+import { minimatch } from 'minimatch';
 import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase, createQueries } from '../db/index.js';
 import { update } from './update.js';
+import { DEFAULT_EXCLUDE, readGitignore } from './init.js';
 
 // ============================================================
 // Types
@@ -219,16 +221,31 @@ export function getSessionInfo(projectPath: string): SessionInfo | null {
 // ============================================================
 
 /**
- * Detect files that were changed outside of the session
+ * Detect files that were changed outside of the session.
+ * Also cleans up excluded files (e.g. build/) that shouldn't be in the index.
  */
 function detectExternalChanges(projectPath: string, queries: ReturnType<typeof createQueries>): ChangedFile[] {
     const changes: ChangedFile[] = [];
     const projectRoot = resolve(projectPath);
 
+    // Build exclude patterns (same logic as init/update)
+    const gitignorePatterns = readGitignore(projectPath);
+    const excludePatterns = [...DEFAULT_EXCLUDE, ...gitignorePatterns];
+
     // Get all indexed files
     const indexedFiles = queries.getAllFiles();
 
     for (const file of indexedFiles) {
+        // Skip excluded files - remove them from index silently
+        const isExcluded = excludePatterns.some(pattern =>
+            minimatch(file.path, pattern, { dot: true })
+        );
+        if (isExcluded) {
+            queries.clearFileData(file.id);
+            queries.deleteFile(file.id);
+            continue;
+        }
+
         const fullPath = join(projectRoot, file.path);
 
         if (!existsSync(fullPath)) {
@@ -249,6 +266,9 @@ function detectExternalChanges(projectPath: string, queries: ReturnType<typeof c
             // Can't read file - skip
         }
     }
+
+    // Cleanup orphaned items after removing excluded files
+    queries.deleteUnusedItems();
 
     return changes;
 }

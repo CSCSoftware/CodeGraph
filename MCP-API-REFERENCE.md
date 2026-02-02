@@ -29,6 +29,9 @@ Complete reference for all AiDex MCP tools.
   - [aidex_session](#aidex_session)
   - [aidex_note](#aidex_note)
   - [aidex_viewer](#aidex_viewer)
+- [Task Management](#task-management)
+  - [aidex_task](#aidex_task)
+  - [aidex_tasks](#aidex_tasks)
 
 ---
 
@@ -627,6 +630,96 @@ Open an interactive project tree viewer in the browser. Provides visual explorat
 
 ---
 
+## Task Management
+
+### aidex_task
+
+Manage a single task in the project backlog. Tasks persist in the AiDex database and survive between sessions.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `path` | string | ✅ | Path to project with `.aidex` directory |
+| `action` | string | ✅ | `create`, `read`, `update`, `delete`, or `log` |
+| `id` | number | for read/update/delete/log | Task ID |
+| `title` | string | for create | Task title |
+| `description` | string | - | Task description (optional details) |
+| `priority` | number | - | `1` = high, `2` = medium (default), `3` = low |
+| `status` | string | - | `backlog` (default), `active`, `done`, `cancelled` |
+| `tags` | string | - | Comma-separated tags (e.g., `"bug, viewer"`) |
+| `source` | string | - | Where the task came from (e.g., `"code review of parser.ts:142"`) |
+| `sort_order` | number | - | Sort order within same priority (lower = first, default: 0) |
+| `note` | string | for log | Log note text |
+
+**Actions:**
+
+| Action | Required params | Description |
+|--------|----------------|-------------|
+| `create` | `title` | Create a new task |
+| `read` | `id` | Get task details + history log |
+| `update` | `id` | Change any field (title, status, priority, etc.) |
+| `delete` | `id` | Permanently remove a task |
+| `log` | `id`, `note` | Add a note to the task history |
+
+**Auto-logging:** Status changes and task creation are automatically recorded in the task history.
+
+**Examples:**
+```json
+// Create a high-priority bug task
+{
+  "path": ".", "action": "create",
+  "title": "Fix memory leak in parser",
+  "priority": 1, "tags": "bug, parser"
+}
+
+// Read task with history
+{ "path": ".", "action": "read", "id": 1 }
+
+// Mark as done
+{ "path": ".", "action": "update", "id": 1, "status": "done" }
+
+// Cancel a task
+{ "path": ".", "action": "update", "id": 2, "status": "cancelled" }
+
+// Add a log note
+{ "path": ".", "action": "log", "id": 1, "note": "Root cause found: unbounded buffer" }
+```
+
+---
+
+### aidex_tasks
+
+List and filter tasks in the project backlog. Returns tasks grouped by status and sorted by priority.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `path` | string | ✅ | Path to project with `.aidex` directory |
+| `status` | string | - | Filter: `backlog`, `active`, `done`, `cancelled` |
+| `priority` | number | - | Filter: `1`, `2`, `3` |
+| `tag` | string | - | Filter by tag (matches any task containing this tag) |
+
+**Returns:**
+- Tasks grouped by status (Active → Backlog → Done → Cancelled)
+- Priority icons: 🔴 high, 🟡 medium, ⚪ low
+- Tags displayed inline
+
+**Examples:**
+```json
+// All tasks
+{ "path": "." }
+
+// Only active tasks
+{ "path": ".", "status": "active" }
+
+// High priority bugs
+{ "path": ".", "priority": 1, "tag": "bug" }
+```
+
+---
+
 ## Time Format Reference
 
 Used by `aidex_query` parameters `modified_since` and `modified_before`:
@@ -677,6 +770,8 @@ SQLite database at `.aidex/index.db`:
 | `dependencies` | Linked projects |
 | `project_files` | All files with type classification |
 | `metadata` | Key-value store (session times, notes, etc.) |
+| `tasks` | Project backlog tasks (priority, status, tags, timestamps) |
+| `task_log` | Task history log (auto-logged status changes + manual notes) |
 
 ---
 

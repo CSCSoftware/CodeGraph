@@ -2,7 +2,7 @@
 
 MCP Server für persistentes Code-Indexing. Ermöglicht Claude Code schnelle, präzise Suchen statt Grep/Glob.
 
-**Version:** 1.7.0 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/AiDex
+**Version:** 1.8.0 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/AiDex
 
 ## Build & Run
 
@@ -36,7 +36,7 @@ Registriert als MCP Server `aidex` (Prefix: `mcp__aidex__aidex_*`).
 **Nach Änderungen:** Build ausführen, dann Claude Code neu starten.
 **MCP-Name:** Server muss als `"aidex"` registriert sein → Prefix wird `mcp__aidex__aidex_*`.
 
-## Tools (18)
+## Tools (20)
 
 ### Suche & Index
 | Tool | Beschreibung |
@@ -74,6 +74,14 @@ Registriert als MCP Server `aidex` (Prefix: `mcp__aidex__aidex_*`).
 | `aidex_note` | Session-Notizen (persistiert in DB) |
 | `aidex_viewer` | Browser-Explorer mit Live-Reload (v1.3) |
 
+### Task Backlog (v1.8+)
+| Tool | Beschreibung |
+|------|--------------|
+| `aidex_task` | Task CRUD + Log (create/read/update/delete/log) |
+| `aidex_tasks` | Tasks auflisten, filtern nach Status/Priority/Tag |
+
+Status: `backlog → active → done | cancelled`
+
 ## Sprachen
 
 C# · TypeScript · JavaScript · Rust · Python · C · C++ · Java · Go · PHP · Ruby
@@ -89,7 +97,7 @@ src/
 ├── commands/             # Tool-Implementierungen
 │   ├── init.ts, query.ts, signature.ts, update.ts
 │   ├── summary.ts, link.ts, scan.ts, files.ts
-│   ├── session.ts, note.ts
+│   ├── session.ts, note.ts, task.ts
 │   └── viewer/server.ts
 ├── db/
 │   ├── database.ts       # SQLite (WAL)
@@ -114,6 +122,8 @@ src/
 | `signatures` | Header-Kommentare |
 | `project_files` | Alle Dateien mit Typ |
 | `metadata` | Key-Value (Sessions, Notizen) |
+| `tasks` | Backlog-Tasks (Priority, Status, Tags) |
+| `task_log` | Task-Historie (Auto-Log bei Änderungen) |
 
 ## Wichtige Features
 
@@ -142,6 +152,21 @@ aidex_viewer({ path: ".", action: "close" })
 - Live-Reload (chokidar)
 - Syntax-Highlighting
 - Git-Status mit Katzen-Icons (v1.3.1)
+
+### Task Backlog (v1.8)
+```
+aidex_task({ path: ".", action: "create", title: "Bug fixen", priority: 1, tags: "bug" })
+aidex_task({ path: ".", action: "read", id: 1 })           # Task + Log lesen
+aidex_task({ path: ".", action: "update", id: 1, status: "done" })
+aidex_task({ path: ".", action: "log", id: 1, note: "Root cause gefunden" })
+aidex_task({ path: ".", action: "delete", id: 1 })
+aidex_tasks({ path: "." })                                  # Alle Tasks
+aidex_tasks({ path: ".", status: "active", tag: "bug" })    # Gefiltert
+```
+- Priority: 1=high, 2=medium (default), 3=low
+- Status: backlog → active → done | cancelled
+- Auto-Log bei Status-Änderungen und Task-Erstellung
+- Viewer: Tasks-Tab mit Priority-Farben, Done-Toggle, Cancelled-Sektion (durchgestrichen)
 
 ### Auto-Cleanup (v1.3.1)
 `aidex_init` entfernt automatisch Dateien die jetzt excluded sind (z.B. build/).

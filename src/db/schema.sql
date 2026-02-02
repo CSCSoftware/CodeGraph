@@ -128,6 +128,39 @@ CREATE INDEX IF NOT EXISTS idx_project_files_path ON project_files(path);
 CREATE INDEX IF NOT EXISTS idx_project_files_type ON project_files(type);
 
 -- ------------------------------------------------------------
+-- Task Backlog
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    priority INTEGER NOT NULL DEFAULT 2 CHECK(priority IN (1, 2, 3)),
+    status TEXT NOT NULL DEFAULT 'backlog' CHECK(status IN ('backlog', 'active', 'done', 'cancelled')),
+    tags TEXT,
+    source TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    completed_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
+
+-- ------------------------------------------------------------
+-- Task Log (History/Notizen pro Task)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS task_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    note TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_log_task ON task_log(task_id);
+
+-- ------------------------------------------------------------
 -- Metadaten
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS metadata (

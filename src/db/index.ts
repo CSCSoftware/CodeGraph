@@ -13,4 +13,6 @@ export type {
     MethodRow,
     TypeRow,
     DependencyRow,
+    TaskRow,
+    TaskLogRow,
 } from './queries.js';

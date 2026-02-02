@@ -26,12 +26,15 @@ const PORT = 3333;
 let server: ReturnType<typeof createServer> | null = null;
 let wss: WebSocketServer | null = null;
 let fileWatcher: FSWatcher | null = null;
+let viewerDbPath: string | null = null;
 
 interface ViewerMessage {
-    type: 'getTree' | 'getSignature' | 'getFileContent';
+    type: 'getTree' | 'getSignature' | 'getFileContent' | 'getTasks' | 'updateTaskStatus';
     mode?: 'code' | 'all';  // Tree mode
     path?: string;
     file?: string;
+    taskId?: number;
+    status?: string;
 }
 
 interface TreeNode {
@@ -61,6 +64,7 @@ export async function startViewer(projectPath: string): Promise<string> {
     }
 
     const dbPath = path.join(projectPath, INDEX_DIR, 'index.db');
+    viewerDbPath = dbPath;
     const db = openDatabase(dbPath, true); // readonly for queries
     const sqlite = db.getDb();
     const queries = createQueries(db);
@@ -208,6 +212,21 @@ export async function startViewer(projectPath: string): Promise<string> {
                     const content = getFileContent(projectRoot, msg.file);
                     ws.send(JSON.stringify({ type: 'fileContent', file: msg.file, data: content }));
                 }
+                else if (msg.type === 'getTasks') {
+                    const taskData = getTasksFromDb(sqlite);
+                    ws.send(JSON.stringify({ type: 'tasks', data: taskData }));
+                }
+                else if (msg.type === 'updateTaskStatus' && msg.taskId && msg.status) {
+                    const taskData = updateTaskStatus(msg.taskId as number, msg.status as string);
+                    if (taskData) {
+                        // Broadcast updated task list to all clients
+                        wss!.clients.forEach((client) => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(JSON.stringify({ type: 'tasks', data: taskData }));
+                            }
+                        });
+                    }
+                }
             } catch (err) {
                 console.error('[Viewer] Error:', err);
                 ws.send(JSON.stringify({ type: 'error', message: String(err) }));
@@ -245,11 +264,35 @@ export async function startViewer(projectPath: string): Promise<string> {
     });
 }
 
+/**
+ * Broadcast task updates to all connected viewer clients.
+ * Called from task.ts after create/update/delete operations.
+ */
+export function broadcastTaskUpdate(): void {
+    if (!wss || !viewerDbPath) return;
+
+    try {
+        const freshDb = openDatabase(viewerDbPath, false);
+        const taskData = getTasksFromDb(freshDb.getDb());
+        freshDb.close();
+
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({ type: 'tasks', data: taskData }));
+            }
+        });
+        console.error('[Viewer] Broadcast task update to', wss.clients.size, 'clients');
+    } catch (err) {
+        console.error('[Viewer] Failed to broadcast task update:', err);
+    }
+}
+
 export function stopViewer(): string {
     if (server) {
         fileWatcher?.close();
         fileWatcher = null;
         wss?.close();
+        viewerDbPath = null;
         server.close();
         server = null;
         wss = null;
@@ -539,6 +582,66 @@ function getLanguageFromExtension(filePath: string): string {
         '.cfg': 'ini'
     };
     return langMap[ext] || 'plaintext';
+}
+
+/**
+ * Get tasks from the database for the viewer
+ */
+function getTasksFromDb(db: Database.Database): unknown[] {
+    try {
+        // Ensure tasks table exists (auto-migration)
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                priority INTEGER NOT NULL DEFAULT 2 CHECK(priority IN (1, 2, 3)),
+                status TEXT NOT NULL DEFAULT 'backlog' CHECK(status IN ('backlog', 'active', 'done', 'cancelled')),
+                tags TEXT,
+                source TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                completed_at INTEGER
+            );
+        `);
+        return db.prepare(
+            `SELECT * FROM tasks ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'backlog' THEN 1 WHEN 'done' THEN 2 WHEN 'cancelled' THEN 3 END, priority ASC, sort_order ASC, created_at DESC`
+        ).all();
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Update a task's status from the viewer
+ */
+function updateTaskStatus(taskId: number, status: string): unknown[] | null {
+    const validStatuses = ['backlog', 'active', 'done', 'cancelled'];
+    if (!validStatuses.includes(status) || !viewerDbPath) return null;
+
+    try {
+        const writeDb = openDatabase(viewerDbPath, false); // writable connection
+        const db = writeDb.getDb();
+        const now = Date.now();
+        const completedAt = (status === 'done' || status === 'cancelled') ? now : null;
+        db.prepare(
+            `UPDATE tasks SET status = ?, updated_at = ?, completed_at = COALESCE(?, completed_at) WHERE id = ?`
+        ).run(status, now, completedAt, taskId);
+
+        // Auto-log status change
+        db.prepare(
+            `INSERT INTO task_log (task_id, note, created_at) VALUES (?, ?, ?)`
+        ).run(taskId, `Status changed to: ${status} (via Viewer)`, now);
+
+        // Read back tasks on same writable connection (guaranteed to see the write)
+        const taskData = getTasksFromDb(db);
+        writeDb.close();
+        return taskData;
+    } catch (err) {
+        console.error('[Viewer] Failed to update task status:', err);
+        return null;
+    }
 }
 
 function getViewerHTML(projectPath: string): string {
@@ -877,6 +980,59 @@ function getViewerHTML(projectPath: string): string {
         .hljs {
             background: var(--bg-secondary) !important;
         }
+
+        /* Task backlog styles */
+        .task-list { list-style: none; }
+        .task-item {
+            padding: 12px 14px;
+            background: var(--bg-secondary);
+            margin-bottom: 6px;
+            border-radius: 6px;
+            border-left: 3px solid var(--text-muted);
+        }
+        .task-item.priority-1 { border-left-color: var(--accent-red); }
+        .task-item.priority-2 { border-left-color: var(--accent-yellow); }
+        .task-item.priority-3 { border-left-color: var(--text-muted); }
+        .task-item.status-done { opacity: 0.6; }
+        .task-item.status-cancelled { opacity: 0.5; text-decoration: line-through; }
+        .task-title { font-weight: 600; font-size: 0.95em; }
+        .task-description { font-size: 0.85em; color: var(--text-secondary); margin-top: 4px; }
+        .task-meta { font-size: 0.8em; color: var(--text-muted); margin-top: 6px; display: flex; gap: 12px; }
+        .task-tags { color: var(--accent-cyan); font-size: 0.8em; margin-top: 4px; }
+        .task-section-header {
+            color: var(--accent-purple);
+            font-size: 1em;
+            font-weight: 600;
+            margin: 20px 0 10px 0;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+        .task-section-header:first-child { margin-top: 0; }
+        .task-done-toggle {
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 0.9em;
+            margin-top: 20px;
+            padding: 8px 0;
+            user-select: none;
+        }
+        .task-done-toggle:hover { color: var(--text-secondary); }
+        .task-done-list.collapsed { display: none; }
+        .task-actions { margin-top: 8px; display: flex; gap: 6px; }
+        .task-btn {
+            padding: 3px 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .task-btn:hover { background: var(--border); color: var(--text-primary); }
+        .task-btn-done { border-color: var(--accent-green, #4caf50); }
+        .task-btn-done:hover { background: var(--accent-green, #4caf50); color: #fff; }
+        .task-btn-cancel { border-color: var(--accent-red); }
+        .task-btn-cancel:hover { background: var(--accent-red); color: #fff; }
     </style>
 </head>
 <body>
@@ -900,6 +1056,7 @@ function getViewerHTML(projectPath: string): string {
             <div class="tab-bar">
                 <div class="tab active" data-tab="overview">Overview</div>
                 <div class="tab" data-tab="source">Code</div>
+                <div class="tab" data-tab="tasks">Tasks</div>
             </div>
             <div class="panel-content" id="detail">
                 <div class="empty-state">
@@ -917,6 +1074,7 @@ function getViewerHTML(projectPath: string): string {
         let currentDetailTab = 'overview';
         let cachedSignature = null;
         let cachedContent = null;
+        let cachedTasks = null;
 
         ws.onopen = () => {
             console.log('Connected to AiDex Viewer');
@@ -951,6 +1109,11 @@ function getViewerHTML(projectPath: string): string {
                 if (currentDetailTab === 'source') {
                     renderFileContent(msg.file, msg.data);
                 }
+            } else if (msg.type === 'tasks') {
+                cachedTasks = msg.data;
+                if (currentDetailTab === 'tasks') {
+                    renderTasks(msg.data);
+                }
             }
         };
 
@@ -968,7 +1131,8 @@ function getViewerHTML(projectPath: string): string {
         // Tab switching - Detail panel
         document.querySelectorAll('.detail-panel .tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                if (!currentFile) return;
+                // Tasks tab works without file selection
+                if (!currentFile && tab.dataset.tab !== 'tasks') return;
 
                 document.querySelectorAll('.detail-panel .tab').forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
@@ -986,6 +1150,13 @@ function getViewerHTML(projectPath: string): string {
                     } else {
                         document.getElementById('detail').innerHTML = '<div class="loading">Loading source...</div>';
                         ws.send(JSON.stringify({ type: 'getFileContent', file: currentFile }));
+                    }
+                } else if (currentDetailTab === 'tasks') {
+                    if (cachedTasks) {
+                        renderTasks(cachedTasks);
+                    } else {
+                        document.getElementById('detail').innerHTML = '<div class="loading">Loading tasks...</div>';
+                        ws.send(JSON.stringify({ type: 'getTasks' }));
                     }
                 }
             });
@@ -1178,6 +1349,88 @@ function getViewerHTML(projectPath: string): string {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function renderTasks(taskList) {
+            const detail = document.getElementById('detail');
+            const priorityIcon = { 1: '\\u{1F534}', 2: '\\u{1F7E1}', 3: '\\u26AA' };
+            const priorityLabel = { 1: 'High', 2: 'Medium', 3: 'Low' };
+
+            const active = taskList.filter(t => t.status === 'active');
+            const backlog = taskList.filter(t => t.status === 'backlog');
+            const done = taskList.filter(t => t.status === 'done');
+            const cancelled = taskList.filter(t => t.status === 'cancelled');
+
+            let html = '<h2>Task Backlog (' + taskList.length + ')</h2>';
+
+            if (active.length > 0) {
+                html += '<div class="task-section-header">Active (' + active.length + ')</div>';
+                html += '<ul class="task-list">';
+                for (const t of active) html += renderTaskItem(t, priorityIcon, priorityLabel);
+                html += '</ul>';
+            }
+
+            if (backlog.length > 0) {
+                html += '<div class="task-section-header">Backlog (' + backlog.length + ')</div>';
+                html += '<ul class="task-list">';
+                for (const t of backlog) html += renderTaskItem(t, priorityIcon, priorityLabel);
+                html += '</ul>';
+            }
+
+            if (done.length > 0) {
+                html += '<div class="task-done-toggle" onclick="var el=this.nextElementSibling;el.classList.toggle(\\'collapsed\\');this.textContent=el.classList.contains(\\'collapsed\\')?\\'\u2705 Done (' + done.length + ') \u25B8\\':\\'\u2705 Done (' + done.length + ') \u25BE\\'">\\u2705 Done (' + done.length + ') \\u25B8</div>';
+                html += '<ul class="task-list task-done-list collapsed">';
+                for (const t of done) html += renderTaskItem(t, priorityIcon, priorityLabel);
+                html += '</ul>';
+            }
+
+            if (cancelled.length > 0) {
+                html += '<div class="task-done-toggle" onclick="var el=this.nextElementSibling;el.classList.toggle(\\'collapsed\\');this.textContent=el.classList.contains(\\'collapsed\\')?\\'\u274C Cancelled (' + cancelled.length + ') \u25B8\\':\\'\u274C Cancelled (' + cancelled.length + ') \u25BE\\'">\\u274C Cancelled (' + cancelled.length + ') \\u25B8</div>';
+                html += '<ul class="task-list task-done-list collapsed">';
+                for (const t of cancelled) html += renderTaskItem(t, priorityIcon, priorityLabel);
+                html += '</ul>';
+            }
+
+            if (taskList.length === 0) {
+                html += '<div class="empty-state"><p>No tasks yet.</p><p style="margin-top:8px;font-size:0.9em">Use <code>aidex_task</code> to create tasks from the chat.</p></div>';
+            }
+
+            detail.innerHTML = html;
+        }
+
+        function renderTaskItem(t, priorityIcon, priorityLabel) {
+            let html = '<li class="task-item priority-' + t.priority + ' status-' + t.status + '">';
+            html += '<div class="task-title">' + (priorityIcon[t.priority] || '') + ' #' + t.id + ' ' + escapeHtml(t.title) + '</div>';
+            if (t.description) {
+                html += '<div class="task-description">' + escapeHtml(t.description) + '</div>';
+            }
+            const meta = [];
+            meta.push(priorityLabel[t.priority] || 'Medium');
+            if (t.source) meta.push('Source: ' + escapeHtml(t.source));
+            const created = new Date(t.created_at);
+            meta.push(created.toLocaleDateString() + ' ' + created.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+            if (t.completed_at) {
+                const completed = new Date(t.completed_at);
+                meta.push('Done: ' + completed.toLocaleDateString());
+            }
+            html += '<div class="task-meta">' + meta.map(m => '<span>' + m + '</span>').join('') + '</div>';
+            if (t.tags) {
+                html += '<div class="task-tags">' + t.tags.split(',').map(s => '#' + escapeHtml(s.trim())).join(' ') + '</div>';
+            }
+            if (t.status !== 'done' && t.status !== 'cancelled') {
+                html += '<div class="task-actions">';
+                html += '<button class="task-btn task-btn-done" onclick="updateTaskStatus(' + t.id + ', \\'done\\')">\\u2705 Done</button>';
+                html += '<button class="task-btn task-btn-cancel" onclick="updateTaskStatus(' + t.id + ', \\'cancelled\\')">\\u274C Cancel</button>';
+                html += '</div>';
+            }
+            html += '</li>';
+            return html;
+        }
+
+        function updateTaskStatus(taskId, status) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'updateTaskStatus', taskId: taskId, status: status }));
+            }
         }
 
         // Splitter functionality

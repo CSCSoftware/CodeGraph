@@ -93,6 +93,7 @@ The index lives in `.aidex/index.db` (SQLite) - fast, portable, no external depe
 - **Time-based Filtering**: Find what changed in the last hour, day, or week
 - **Project Structure**: Query all files (code, config, docs, assets) without filesystem access
 - **Session Notes**: Leave reminders for the next session - persists in the database
+- **Task Backlog**: Built-in task management that lives with your code index - no external tools needed
 - **Auto-Cleanup**: Excluded files (e.g., build outputs) are automatically removed from index
 
 ## Supported Languages
@@ -226,6 +227,8 @@ aidex_init({ path: "/path/to/your/project" })
 | `aidex_note` | Read/write session notes (persists between sessions) |
 | `aidex_session` | Start session, detect external changes, auto-reindex |
 | `aidex_viewer` | Open interactive project tree in browser |
+| `aidex_task` | Create, read, update, delete tasks with priority and tags |
+| `aidex_tasks` | List and filter tasks by status, priority, or tag |
 
 ## Time-based Filtering
 
@@ -275,6 +278,27 @@ aidex_note({ path: ".", clear: true })                                 # Clear
 - Handover notes: Context for the next session without editing config files
 
 Notes are stored in the SQLite database (`.aidex/index.db`) and persist indefinitely.
+
+## Task Backlog
+
+Keep your project tasks right next to your code index - no Jira, no Trello, no context switching:
+
+```
+aidex_task({ path: ".", action: "create", title: "Fix parser bug", priority: 1, tags: "bug" })
+aidex_task({ path: ".", action: "update", id: 1, status: "done" })
+aidex_task({ path: ".", action: "log", id: 1, note: "Root cause: unbounded buffer" })
+aidex_tasks({ path: ".", status: "active" })
+```
+
+**Features:**
+- **Priorities**: 🔴 high, 🟡 medium, ⚪ low
+- **Statuses**: `backlog → active → done | cancelled`
+- **Tags**: Categorize tasks (`bug`, `feature`, `docs`, etc.)
+- **History log**: Every status change is auto-logged, plus manual notes
+- **Viewer integration**: Tasks tab in the browser viewer with live updates
+- **Persistent**: Tasks survive between sessions, stored in `.aidex/index.db`
+
+Your AI assistant can create tasks while working (*"found a bug in the parser, add it to the backlog"*), track progress, and pick up where you left off next session.
 
 ## Interactive Viewer
 

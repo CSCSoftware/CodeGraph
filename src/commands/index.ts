@@ -12,3 +12,4 @@ export { scan, type ScanParams, type ScanResult, type IndexedProject } from './s
 export { files, type FilesParams, type FilesResult, type ProjectFile } from './files.js';
 export { note, getSessionNote, type NoteParams, type NoteResult } from './note.js';
 export { session, updateSessionHeartbeat, getSessionInfo, formatSessionTime, formatDuration, type SessionParams, type SessionResult, type SessionInfo, type ChangedFile } from './session.js';
+export { task, tasks, type TaskParams, type TaskResult, type TasksParams, type TasksResult, type TaskAction } from './task.js';

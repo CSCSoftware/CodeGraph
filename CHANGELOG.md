@@ -2,6 +2,41 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.8.1] - 2026-02-02
+
+### Added
+- **Cancelled status** for tasks: `backlog → active → done | cancelled`
+  - Cancelled tasks preserved as documentation (not deleted)
+  - Viewer: collapsible ❌ Cancelled section with strikethrough styling
+
+### Fixed
+- **`aidex_update` now respects exclude patterns**: Files in `build/`, `node_modules/`, `.gitignore` patterns are rejected
+  - Previously the viewer's file watcher could re-index excluded files via `aidex_update`
+
+### Technical
+- Auto-migration: existing `tasks` table CHECK constraint updated to include `cancelled`
+- Exported `DEFAULT_EXCLUDE` and `readGitignore` from `init.ts` for reuse
+
+## [1.8.0] - 2026-02-02
+
+### Added
+- **Task Backlog**: Built-in project task management persisted in AiDex database
+  - `aidex_task` - Create, read, update, delete tasks with priority, tags, and descriptions
+  - `aidex_tasks` - List and filter tasks by status, priority, or tag
+  - **Auto-logging**: Status changes and task creation are automatically recorded in task history
+  - **Manual log entries**: Add notes to any task with the `log` action
+  - Priorities: high (🔴), medium (🟡), low (⚪)
+  - Statuses: backlog → active → done
+  - Sort order support for custom ordering within same priority
+- **Viewer Tasks Tab**: Interactive task management in the browser viewer
+  - Priority-colored task list grouped by status
+  - Done toggle directly from the viewer
+  - Tag display
+
+### Technical
+- New database tables: `tasks` and `task_log` with auto-migration
+- Tasks survive between sessions (persisted in SQLite)
+
 ## [1.7.0] - 2026-02-01
 
 ### Added
