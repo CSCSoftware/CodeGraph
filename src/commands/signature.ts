@@ -8,7 +8,8 @@ import { existsSync } from 'fs';
 import { glob } from 'glob';
 import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase } from '../db/index.js';
-import { createQueries, type MethodRow, type TypeRow } from '../db/queries.js';
+import { createQueries, type Queries, type MethodRow, type TypeRow } from '../db/queries.js';
+import { globToRegex } from '../utils/glob.js';
 
 // ============================================================
 // Types
@@ -142,6 +143,47 @@ export function signature(params: SignatureParams): SignatureResult {
 }
 
 /**
+ * Get signature data for a single file using pre-opened queries (internal helper)
+ */
+function getSignatureFromQueries(queries: Queries, file: string): SignatureResult {
+    const normalizedFile = file.replace(/\\/g, '/');
+    const fileRow = queries.getFileByPath(normalizedFile);
+    if (!fileRow) {
+        return {
+            success: false,
+            file: normalizedFile,
+            headerComments: null,
+            types: [],
+            methods: [],
+            error: `File "${normalizedFile}" not found in index. It may not be indexed or the path is incorrect.`,
+        };
+    }
+
+    const signatureRow = queries.getSignatureByFile(fileRow.id);
+    const methodRows = queries.getMethodsByFile(fileRow.id);
+    const typeRows = queries.getTypesByFile(fileRow.id);
+
+    return {
+        success: true,
+        file: fileRow.path,
+        headerComments: signatureRow?.header_comments ?? null,
+        types: typeRows.map(t => ({
+            name: t.name,
+            kind: t.kind,
+            lineNumber: t.line_number,
+        })),
+        methods: methodRows.map(m => ({
+            name: m.name,
+            prototype: m.prototype,
+            lineNumber: m.line_number,
+            visibility: m.visibility,
+            isStatic: m.is_static === 1,
+            isAsync: m.is_async === 1,
+        })),
+    };
+}
+
+/**
  * Get signatures for multiple files
  */
 export function signatures(params: SignaturesParams): SignaturesResult {
@@ -160,82 +202,59 @@ export function signatures(params: SignaturesParams): SignaturesResult {
         };
     }
 
-    // Determine which files to query
-    let filesToQuery: string[] = [];
+    // Open database ONCE for all files
+    const db = openDatabase(dbPath, true);
+    const queries = createQueries(db);
 
-    if (files && files.length > 0) {
-        // Use explicit file list (paths as-is, signature() handles normalization)
-        filesToQuery = files;
-    } else if (pattern) {
-        // Use glob pattern against indexed files
-        const db = openDatabase(dbPath, true);
-        const queries = createQueries(db);
-        const allFiles = queries.getAllFiles();
+    try {
+        // Determine which files to query
+        let filesToQuery: string[] = [];
+
+        if (files && files.length > 0) {
+            filesToQuery = files;
+        } else if (pattern) {
+            const allFiles = queries.getAllFiles();
+            const normalizedPattern = pattern.replace(/\\/g, '/');
+            const regex = globToRegex(normalizedPattern);
+
+            filesToQuery = allFiles
+                .map(f => f.path)
+                .filter(p => {
+                    const normalizedPath = p.replace(/\\/g, '/');
+                    return regex.test(normalizedPath);
+                });
+        } else {
+            db.close();
+            return {
+                success: false,
+                signatures: [],
+                totalFiles: 0,
+                error: 'Either pattern or files parameter is required.',
+            };
+        }
+
+        // Get signatures for all matched files using the same DB connection
+        const results: SignatureResult[] = [];
+        for (const file of filesToQuery) {
+            const result = getSignatureFromQueries(queries, file);
+            results.push(result);
+        }
+
         db.close();
 
-        // Convert glob pattern to regex (normalize pattern to forward slashes)
-        const normalizedPattern = pattern.replace(/\\/g, '/');
-        const regex = globToRegex(normalizedPattern);
-
-        // Test against both original path and forward-slash normalized version
-        filesToQuery = allFiles
-            .map(f => f.path)
-            .filter(p => {
-                const normalizedPath = p.replace(/\\/g, '/');
-                return regex.test(normalizedPath);
-            });
-    } else {
+        return {
+            success: true,
+            signatures: results,
+            totalFiles: results.length,
+        };
+    } catch (error) {
+        db.close();
         return {
             success: false,
             signatures: [],
             totalFiles: 0,
-            error: 'Either pattern or files parameter is required.',
+            error: `Error retrieving signatures: ${error instanceof Error ? error.message : String(error)}`,
         };
     }
-
-    // Get signatures for all matched files
-    const results: SignatureResult[] = [];
-    for (const file of filesToQuery) {
-        const result = signature({ path: projectPath, file });
-        results.push(result);
-    }
-
-    return {
-        success: true,
-        signatures: results,
-        totalFiles: results.length,
-    };
 }
 
-/**
- * Convert a glob pattern to a regular expression
- * Supports: *, **, ?
- */
-function globToRegex(pattern: string): RegExp {
-    // Normalize to forward slashes
-    pattern = pattern.replace(/\\/g, '/');
-
-    // Escape regex special chars except * and ?
-    let regex = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-
-    // Convert glob patterns to regex:
-    // ** matches any path (including /)
-    // * matches any characters except /
-    // ? matches any single character except /
-
-    // Handle ** first (must match across directories)
-    // **/ at start or middle means "any path prefix"
-    regex = regex.replace(/\*\*\//g, '(.*/)?');
-    // /** at end means "any path suffix"
-    regex = regex.replace(/\/\*\*/g, '(/.*)?');
-    // Standalone ** (rare)
-    regex = regex.replace(/\*\*/g, '.*');
-
-    // Handle single * (matches within directory)
-    regex = regex.replace(/\*/g, '[^/]*');
-
-    // Handle ? (single character)
-    regex = regex.replace(/\?/g, '[^/]');
-
-    return new RegExp(`^${regex}$`, 'i');
-}

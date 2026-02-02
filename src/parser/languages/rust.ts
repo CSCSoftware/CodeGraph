@@ -72,7 +72,6 @@ export const RUST_TYPE_NODES = new Set([
     'enum_item',
     'trait_item',
     'type_item',
-    'impl_item',
 ]);
 
 /**

@@ -81,7 +81,6 @@ export const CPP_COMMENT_NODES = new Set([
  */
 export const CPP_METHOD_NODES = new Set([
     'function_definition',
-    'function_declarator',
     'template_function',
 ]);
 

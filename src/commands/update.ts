@@ -14,7 +14,7 @@ import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
 import { openDatabase, createQueries, type AiDexDatabase, type Queries } from '../db/index.js';
 import { extract } from '../parser/index.js';
-import { DEFAULT_EXCLUDE, readGitignore } from './init.js';
+import { DEFAULT_EXCLUDE, readGitignore, shortHash } from './init.js';
 
 // ============================================================
 // Types
@@ -125,7 +125,7 @@ export function update(params: UpdateParams): UpdateResult {
         }
 
         // Calculate new hash
-        const newHash = createHash('sha256').update(content).digest('hex').substring(0, 16);
+        const newHash = shortHash(content);
 
         // Check if file has actually changed
         if (existingFile && existingFile.hash === newHash) {
@@ -209,7 +209,7 @@ export function update(params: UpdateParams): UpdateResult {
             let lineId = 1;
             for (const line of extraction.lines) {
                 const lineContent = contentLines[line.lineNumber - 1] ?? '';
-                const lineHash = createHash('sha256').update(lineContent).digest('hex').substring(0, 16);
+                const lineHash = shortHash(lineContent);
 
                 // Check if this hash existed before (regardless of line number)
                 const oldModified = oldHashToModified.get(lineHash);
@@ -233,7 +233,7 @@ export function update(params: UpdateParams): UpdateResult {
                     // Line wasn't recorded, add it now
                     const newLineId = lineId++;
                     const lineContent = contentLines[item.lineNumber - 1] ?? '';
-                    const lineHash = createHash('sha256').update(lineContent).digest('hex').substring(0, 16);
+                    const lineHash = shortHash(lineContent);
 
                     const oldModified = oldHashToModified.get(lineHash);
                     const modified = oldModified ?? now;

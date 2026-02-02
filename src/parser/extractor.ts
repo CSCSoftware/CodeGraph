@@ -84,14 +84,19 @@ export function extract(sourceCode: string, filePath: string): ExtractionResult 
         const lineNumber = node.startPosition.row + 1; // 1-based
 
         // Check for comments
-        if (config.commentNodes.has(node.type)) {
+        // Fix 1.8: Python docstrings (expression_statement containing only a string child)
+        const isDocstring = language === 'python'
+            && node.type === 'expression_statement'
+            && node.childCount === 1
+            && node.children[0].type === 'string';
+        if (config.commentNodes.has(node.type) || isDocstring) {
             if (!seenCode) {
                 // This is a header comment
                 headerComments.push(extractCommentText(node.text));
             }
             setLineType(lineNumber, 'comment');
             extractIdentifiersFromComment(node.text, lineNumber, items, config.isKeyword);
-            return; // Don't recurse into comments
+            return; // Don't recurse into comments/docstrings
         }
 
         // Check for type declarations (class, struct, interface, etc.)
@@ -278,18 +283,44 @@ function extractMethodInfo(
     let isStatic = false;
     let isAsync = false;
 
+    // Helper to check modifier text
+    function checkModifier(text: string): void {
+        const lower = text.toLowerCase();
+        if (lower === 'public' || lower === 'private' || lower === 'protected' || lower === 'internal') {
+            visibility = lower;
+        }
+        if (lower === 'static') isStatic = true;
+        if (lower === 'async') isAsync = true;
+    }
+
     for (const child of node.children) {
         if (child.type === 'identifier' || child.type === 'property_identifier' || child.type === 'name') {
             if (!name) name = child.text;
         }
 
-        // Check modifiers
-        const text = child.text.toLowerCase();
-        if (text === 'public' || text === 'private' || text === 'protected' || text === 'internal') {
-            visibility = text;
+        // Fix 3.12: Handle modifier containers (C# modifier_list, etc.)
+        if (child.type === 'modifiers' || child.type === 'modifier_list' || child.type === 'modifier') {
+            // Recurse into modifier container to find individual modifiers
+            for (const mod of child.children) {
+                checkModifier(mod.text);
+            }
+            // Also check the container itself if it's a single modifier
+            checkModifier(child.text);
+        } else {
+            // Check modifiers directly on child
+            checkModifier(child.text);
         }
-        if (text === 'static') isStatic = true;
-        if (text === 'async') isAsync = true;
+    }
+
+    // Fix 1.7: Arrow functions / function expressions get name from parent variable_declarator
+    if (!name && (node.type === 'arrow_function' || node.type === 'function_expression')) {
+        const parent = node.parent;
+        if (parent && parent.type === 'variable_declarator') {
+            const nameNode = parent.children.find(c => c.type === 'identifier');
+            if (nameNode) {
+                name = nameNode.text;
+            }
+        }
     }
 
     if (!name) {
@@ -298,7 +329,7 @@ function extractMethodInfo(
 
     // Extract prototype (first line of method, cleaned up)
     const startLine = node.startPosition.row;
-    const endLine = Math.min(startLine + 2, sourceLines.length - 1); // Max 3 lines for prototype
+    const endLine = Math.min(startLine + 5, sourceLines.length - 1); // Max 6 lines for prototype
 
     let prototype = '';
     for (let i = startLine; i <= endLine; i++) {

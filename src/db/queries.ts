@@ -253,7 +253,7 @@ export class Queries {
 
     deleteUnusedItems(): number {
         this._deleteUnusedItems ??= this.db.prepare(
-            'DELETE FROM items WHERE id NOT IN (SELECT DISTINCT item_id FROM occurrences)'
+            'DELETE FROM items WHERE NOT EXISTS (SELECT 1 FROM occurrences WHERE occurrences.item_id = items.id)'
         );
         const result = this._deleteUnusedItems.run();
         return result.changes;
@@ -403,14 +403,18 @@ export class Queries {
                 sql = 'SELECT * FROM items WHERE term = ? COLLATE NOCASE LIMIT ?';
                 param = term;
                 break;
-            case 'contains':
-                sql = 'SELECT * FROM items WHERE term LIKE ? COLLATE NOCASE LIMIT ?';
-                param = `%${term}%`;
+            case 'contains': {
+                const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+                sql = "SELECT * FROM items WHERE term LIKE ? ESCAPE '\\' COLLATE NOCASE LIMIT ?";
+                param = `%${escaped}%`;
                 break;
-            case 'starts_with':
-                sql = 'SELECT * FROM items WHERE term LIKE ? COLLATE NOCASE LIMIT ?';
-                param = `${term}%`;
+            }
+            case 'starts_with': {
+                const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+                sql = "SELECT * FROM items WHERE term LIKE ? ESCAPE '\\' COLLATE NOCASE LIMIT ?";
+                param = `${escaped}%`;
                 break;
+            }
         }
 
         return this.db.prepare(sql).all(param, limit) as ItemRow[];
@@ -522,9 +526,11 @@ export class Queries {
     }
 
     updateTask(id: number, fields: Partial<Pick<TaskRow, 'title' | 'description' | 'priority' | 'status' | 'tags' | 'source' | 'sort_order'>>): boolean {
+        const ALLOWED_FIELDS = new Set(['title', 'description', 'status', 'priority', 'tags', 'sort_order', 'completed_at']);
         const sets: string[] = [];
         const values: unknown[] = [];
         for (const [key, value] of Object.entries(fields)) {
+            if (!ALLOWED_FIELDS.has(key)) continue;
             sets.push(`${key} = ?`);
             values.push(value);
         }
@@ -534,6 +540,9 @@ export class Queries {
         if (fields.status === 'done') {
             sets.push('completed_at = ?');
             values.push(Date.now());
+        } else if (fields.status === 'active' || fields.status === 'backlog') {
+            sets.push('completed_at = ?');
+            values.push(null);
         }
         values.push(id);
         const sql = `UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`;

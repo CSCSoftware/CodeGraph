@@ -11,6 +11,7 @@ import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase, createQueries } from '../db/index.js';
 import { parseTimeOffset } from './query.js';
 import type { ProjectFileRow, FileRow } from '../db/queries.js';
+import { globToRegex } from '../utils/glob.js';
 
 // ============================================================
 // Types
@@ -155,21 +156,3 @@ function isValidType(type: string): boolean {
     return VALID_TYPES.has(type);
 }
 
-function globToRegex(pattern: string): RegExp {
-    // Normalize to forward slashes
-    let regex = pattern.replace(/\\/g, '/');
-
-    // Escape special regex chars except * and ?
-    regex = regex.replace(/[.+^${}()|[\]]/g, '\\$&');
-
-    // Convert glob to regex - use placeholders to avoid double-replacement
-    regex = regex
-        .replace(/\*\*\//g, '\x00STARSTARSLASH\x00')  // Placeholder for **/
-        .replace(/\*\*/g, '\x00STARSTAR\x00')          // Placeholder for **
-        .replace(/\*/g, '[^/]*')                        // * matches anything except /
-        .replace(/\?/g, '.')                            // ? matches single char
-        .replace(/\x00STARSTARSLASH\x00/g, '(.*/)?')   // **/ matches zero or more dirs
-        .replace(/\x00STARSTAR\x00/g, '.*');           // ** matches anything
-
-    return new RegExp('^' + regex + '$', 'i');
-}

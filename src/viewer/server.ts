@@ -27,6 +27,7 @@ let server: ReturnType<typeof createServer> | null = null;
 let wss: WebSocketServer | null = null;
 let fileWatcher: FSWatcher | null = null;
 let viewerDbPath: string | null = null;
+let viewerDb: ReturnType<typeof openDatabase> | null = null;
 
 interface ViewerMessage {
     type: 'getTree' | 'getSignature' | 'getFileContent' | 'getTasks' | 'updateTaskStatus';
@@ -65,9 +66,9 @@ export async function startViewer(projectPath: string): Promise<string> {
 
     const dbPath = path.join(projectPath, INDEX_DIR, 'index.db');
     viewerDbPath = dbPath;
-    const db = openDatabase(dbPath, true); // readonly for queries
-    const sqlite = db.getDb();
-    const queries = createQueries(db);
+    viewerDb = openDatabase(dbPath, true); // readonly for queries
+    const sqlite = viewerDb.getDb();
+    const queries = createQueries(viewerDb);
     const projectRoot = path.resolve(projectPath);
     const absoluteProjectPath = path.resolve(projectPath); // For updateIndex
 
@@ -201,11 +202,15 @@ export async function startViewer(projectPath: string): Promise<string> {
 
                 if (msg.type === 'getTree') {
                     const mode = msg.mode || 'code';
-                    const tree = await buildTree(sqlite, projectPath, mode, viewerSessionChanges, cachedGitInfo);
+                    const freshDb = openDatabase(dbPath, true);
+                    const tree = await buildTree(freshDb.getDb(), projectPath, mode, viewerSessionChanges, cachedGitInfo);
+                    freshDb.close();
                     ws.send(JSON.stringify({ type: 'tree', mode, data: tree }));
                 }
                 else if (msg.type === 'getSignature' && msg.file) {
-                    const signature = await getFileSignature(sqlite, msg.file);
+                    const freshDb = openDatabase(dbPath, true);
+                    const signature = await getFileSignature(freshDb.getDb(), msg.file);
+                    freshDb.close();
                     ws.send(JSON.stringify({ type: 'signature', file: msg.file, data: signature }));
                 }
                 else if (msg.type === 'getFileContent' && msg.file) {
@@ -213,7 +218,9 @@ export async function startViewer(projectPath: string): Promise<string> {
                     ws.send(JSON.stringify({ type: 'fileContent', file: msg.file, data: content }));
                 }
                 else if (msg.type === 'getTasks') {
-                    const taskData = getTasksFromDb(sqlite);
+                    const freshDb = openDatabase(dbPath, true);
+                    const taskData = getTasksFromDb(freshDb.getDb());
+                    freshDb.close();
                     ws.send(JSON.stringify({ type: 'tasks', data: taskData }));
                 }
                 else if (msg.type === 'updateTaskStatus' && msg.taskId && msg.status) {
@@ -238,7 +245,9 @@ export async function startViewer(projectPath: string): Promise<string> {
         });
 
         // Send initial tree (code files only)
-        buildTree(sqlite, projectPath, 'code', viewerSessionChanges, cachedGitInfo).then(tree => {
+        const initDb = openDatabase(dbPath, true);
+        buildTree(initDb.getDb(), projectPath, 'code', viewerSessionChanges, cachedGitInfo).then(tree => {
+            initDb.close();
             ws.send(JSON.stringify({ type: 'tree', mode: 'code', data: tree }));
         });
     });
@@ -292,6 +301,8 @@ export function stopViewer(): string {
         fileWatcher?.close();
         fileWatcher = null;
         wss?.close();
+        viewerDb?.close();
+        viewerDb = null;
         viewerDbPath = null;
         server.close();
         server = null;
@@ -381,7 +392,7 @@ async function buildTree(
                    (SELECT COUNT(*) FROM types t WHERE t.file_id = f.id) as types
             FROM files f
             LEFT JOIN lines l ON l.file_id = f.id
-            LEFT JOIN occurrences o ON o.line_id = l.id
+            LEFT JOIN occurrences o ON o.file_id = f.id AND o.line_id = l.id
             GROUP BY f.id
             ORDER BY f.path
         `).all() as Array<{ path: string; items: number; methods: number; types: number }>;
@@ -400,7 +411,7 @@ async function buildTree(
                    (SELECT COUNT(*) FROM types t WHERE t.file_id = f.id) as types
             FROM files f
             LEFT JOIN lines l ON l.file_id = f.id
-            LEFT JOIN occurrences o ON o.line_id = l.id
+            LEFT JOIN occurrences o ON o.file_id = f.id AND o.line_id = l.id
             GROUP BY f.id
         `).all() as Array<{ path: string; items: number; methods: number; types: number }>;
 
@@ -482,6 +493,11 @@ function sortTree(node: TreeNode) {
 }
 
 async function getFileSignature(db: Database.Database, filePath: string): Promise<object> {
+    // Prevent path traversal in DB lookups
+    if (filePath.includes('..')) {
+        return { error: 'Access denied: invalid path' };
+    }
+
     const file = db.prepare(`SELECT id FROM files WHERE path = ?`).get(filePath) as { id: number } | undefined;
 
     if (!file) {
@@ -519,7 +535,13 @@ async function getFileSignature(db: Database.Database, filePath: string): Promis
  * Get file content for the Code tab
  */
 function getFileContent(projectRoot: string, filePath: string): { content: string; language: string } | { error: string } {
-    const fullPath = path.join(projectRoot, filePath);
+    const resolvedRoot = path.resolve(projectRoot);
+    const fullPath = path.resolve(path.join(projectRoot, filePath));
+
+    // Prevent path traversal
+    if (!fullPath.startsWith(resolvedRoot + path.sep) && fullPath !== resolvedRoot) {
+        return { error: 'Access denied: path outside project' };
+    }
 
     if (!existsSync(fullPath)) {
         return { error: 'File not found' };
@@ -644,15 +666,27 @@ function updateTaskStatus(taskId: number, status: string): unknown[] | null {
     }
 }
 
+/**
+ * Escape HTML special characters to prevent XSS
+ */
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function getViewerHTML(projectPath: string): string {
-    const projectName = path.basename(projectPath);
+    const projectName = escapeHtml(path.basename(projectPath));
 
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${PRODUCT_NAME} Viewer - ${projectName}</title>
+    <title>${escapeHtml(PRODUCT_NAME)} Viewer - ${projectName}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.0/styles/tokyo-night-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.0/highlight.min.js"></script>
     <style>
@@ -1037,7 +1071,7 @@ function getViewerHTML(projectPath: string): string {
 </head>
 <body>
     <header>
-        <h1>${PRODUCT_NAME} Viewer</h1>
+        <h1>${escapeHtml(PRODUCT_NAME)} Viewer</h1>
         <span class="project-name">${projectName}</span>
     </header>
 
