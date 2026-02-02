@@ -11,6 +11,11 @@ Ideensammlung für zukünftige Features und Erweiterungen.
 - Impact-Analyse: "Wenn ich diese Datei ändere, welche anderen sind betroffen?"
 - Visualisierung als Graph im Viewer
 
+### Update-Benachrichtigung
+- Beim MCP-Server-Start prüfen ob eine neuere Version auf npm verfügbar ist
+- Dem User (bzw. der KI) einen Hinweis anzeigen: "AiDex v1.8.0 verfügbar, installiert: v1.7.0"
+- Nicht blockierend, nur Info - z.B. im `aidex_session` oder `aidex_status` Output
+
 ---
 
 ## B. AiDex Global / Hub (v2.0) - Neue Meta-Ebene

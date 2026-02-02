@@ -5,7 +5,8 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, type QueryMode } from '../commands/index.js';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, type QueryMode, type TaskAction } from '../commands/index.js';
+import type { TaskRow } from '../db/index.js';
 import { openDatabase } from '../db/index.js';
 import { startViewer, stopViewer } from '../viewer/index.js';
 import { PRODUCT_NAME, PRODUCT_NAME_LOWER, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
@@ -398,6 +399,91 @@ export function registerTools(): Tool[] {
                 required: ['path'],
             },
         },
+        {
+            name: `${TOOL_PREFIX}task`,
+            description: `Manage a single task in the project backlog. Actions: create (new task), read (get task + log), update (change fields), delete, log (add history note). Tasks persist in the ${PRODUCT_NAME} database. Completed tasks are preserved as documentation.`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: `Path to project with ${INDEX_DIR} directory`,
+                    },
+                    action: {
+                        type: 'string',
+                        enum: ['create', 'read', 'update', 'delete', 'log'],
+                        description: 'Action to perform on the task',
+                    },
+                    id: {
+                        type: 'number',
+                        description: 'Task ID (required for read/update/delete/log)',
+                    },
+                    title: {
+                        type: 'string',
+                        description: 'Task title (required for create)',
+                    },
+                    description: {
+                        type: 'string',
+                        description: 'Task description (optional details)',
+                    },
+                    priority: {
+                        type: 'number',
+                        enum: [1, 2, 3],
+                        description: 'Priority: 1=high, 2=medium (default), 3=low',
+                    },
+                    status: {
+                        type: 'string',
+                        enum: ['backlog', 'active', 'done', 'cancelled'],
+                        description: 'Task status (default: backlog)',
+                    },
+                    tags: {
+                        type: 'string',
+                        description: 'Comma-separated tags (e.g., "bug, viewer, parser")',
+                    },
+                    source: {
+                        type: 'string',
+                        description: 'Where the task came from (freetext, e.g., "code review of parser.ts:142")',
+                    },
+                    sort_order: {
+                        type: 'number',
+                        description: 'Sort order within same priority (lower = first, default: 0)',
+                    },
+                    note: {
+                        type: 'string',
+                        description: 'Log note text (required for log action)',
+                    },
+                },
+                required: ['path', 'action'],
+            },
+        },
+        {
+            name: `${TOOL_PREFIX}tasks`,
+            description: `List and filter tasks in the project backlog. Returns tasks grouped by status (active, backlog, done, cancelled) and sorted by priority. Use to get an overview of all open and completed work.`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: `Path to project with ${INDEX_DIR} directory`,
+                    },
+                    status: {
+                        type: 'string',
+                        enum: ['backlog', 'active', 'done', 'cancelled'],
+                        description: 'Filter by status (default: show all)',
+                    },
+                    priority: {
+                        type: 'number',
+                        enum: [1, 2, 3],
+                        description: 'Filter by priority',
+                    },
+                    tag: {
+                        type: 'string',
+                        description: 'Filter by tag (matches any task containing this tag)',
+                    },
+                },
+                required: ['path'],
+            },
+        },
     ];
 }
 
@@ -463,6 +549,12 @@ export async function handleToolCall(
 
             case `${TOOL_PREFIX}viewer`:
                 return handleViewer(args);
+
+            case `${TOOL_PREFIX}task`:
+                return handleTask(args);
+
+            case `${TOOL_PREFIX}tasks`:
+                return handleTasks(args);
 
             default:
                 return {
@@ -1401,4 +1493,140 @@ async function handleViewer(args: Record<string, unknown>): Promise<{ content: A
             content: [{ type: 'text', text: `Error starting viewer: ${error instanceof Error ? error.message : String(error)}` }],
         };
     }
+}
+
+/**
+ * Handle task (single task CRUD + log)
+ */
+function handleTask(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+    const action = args.action as TaskAction;
+
+    if (!path || !action) {
+        return {
+            content: [{ type: 'text', text: 'Error: path and action parameters are required' }],
+        };
+    }
+
+    const result = task({
+        path,
+        action,
+        id: args.id as number | undefined,
+        title: args.title as string | undefined,
+        description: args.description as string | undefined,
+        priority: args.priority as 1 | 2 | 3 | undefined,
+        status: args.status as 'backlog' | 'active' | 'done' | 'cancelled' | undefined,
+        tags: args.tags as string | undefined,
+        source: args.source as string | undefined,
+        sort_order: args.sort_order as number | undefined,
+        note: args.note as string | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    const priorityLabel: Record<number, string> = { 1: '🔴 high', 2: '🟡 medium', 3: '⚪ low' };
+
+    switch (result.action) {
+        case 'create':
+        case 'update': {
+            const t = result.task!;
+            let msg = `✓ Task #${t.id} ${result.action === 'create' ? 'created' : 'updated'}\n\n`;
+            msg += `**${t.title}**\n`;
+            msg += `Priority: ${priorityLabel[t.priority]} | Status: ${t.status}\n`;
+            if (t.description) msg += `Description: ${t.description}\n`;
+            if (t.tags) msg += `Tags: ${t.tags}\n`;
+            if (t.source) msg += `Source: ${t.source}\n`;
+            return { content: [{ type: 'text', text: msg.trimEnd() }] };
+        }
+        case 'read': {
+            const t = result.task!;
+            let msg = `# Task #${t.id}: ${t.title}\n\n`;
+            msg += `Priority: ${priorityLabel[t.priority]} | Status: ${t.status}\n`;
+            if (t.description) msg += `Description: ${t.description}\n`;
+            if (t.tags) msg += `Tags: ${t.tags}\n`;
+            if (t.source) msg += `Source: ${t.source}\n`;
+            msg += `Created: ${new Date(t.created_at).toISOString()}\n`;
+            if (t.completed_at) msg += `Completed: ${new Date(t.completed_at).toISOString()}\n`;
+            if (result.log && result.log.length > 0) {
+                msg += `\n## Log (${result.log.length})\n`;
+                for (const entry of result.log) {
+                    msg += `- [${new Date(entry.created_at).toISOString()}] ${entry.note}\n`;
+                }
+            }
+            return { content: [{ type: 'text', text: msg.trimEnd() }] };
+        }
+        case 'delete':
+            return { content: [{ type: 'text', text: `✓ Task #${args.id} deleted` }] };
+        case 'log': {
+            const t = result.task!;
+            let msg = `✓ Log added to Task #${t.id}: ${t.title}\n\n`;
+            msg += `## Log (${result.log!.length})\n`;
+            for (const entry of result.log!) {
+                msg += `- [${new Date(entry.created_at).toISOString()}] ${entry.note}\n`;
+            }
+            return { content: [{ type: 'text', text: msg.trimEnd() }] };
+        }
+        default:
+            return { content: [{ type: 'text', text: 'Unknown action' }] };
+    }
+}
+
+/**
+ * Handle tasks (list/filter)
+ */
+function handleTasks(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const path = args.path as string;
+
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = tasks({
+        path,
+        status: args.status as 'backlog' | 'active' | 'done' | 'cancelled' | undefined,
+        priority: args.priority as 1 | 2 | 3 | undefined,
+        tag: args.tag as string | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.tasks.length === 0) {
+        return {
+            content: [{ type: 'text', text: 'No tasks found.' }],
+        };
+    }
+
+    const priorityIcon: Record<number, string> = { 1: '🔴', 2: '🟡', 3: '⚪' };
+    let msg = `# Task Backlog (${result.total})\n\n`;
+
+    // Group by status
+    const byStatus: Record<string, TaskRow[]> = { active: [], backlog: [], done: [], cancelled: [] };
+    for (const t of result.tasks) {
+        byStatus[t.status].push(t);
+    }
+
+    for (const [status, items] of Object.entries(byStatus)) {
+        if (items.length === 0) continue;
+        msg += `## ${status.charAt(0).toUpperCase() + status.slice(1)} (${items.length})\n`;
+        for (const t of items) {
+            msg += `- ${priorityIcon[t.priority]} **#${t.id}** ${t.title}`;
+            if (t.tags) msg += ` [${t.tags}]`;
+            msg += '\n';
+        }
+        msg += '\n';
+    }
+
+    return {
+        content: [{ type: 'text', text: msg.trimEnd() }],
+    };
 }

@@ -75,6 +75,27 @@ export interface ProjectFileRow {
     indexed: number;
 }
 
+export interface TaskRow {
+    id: number;
+    title: string;
+    description: string | null;
+    priority: 1 | 2 | 3;
+    status: 'backlog' | 'active' | 'done' | 'cancelled';
+    tags: string | null;
+    source: string | null;
+    sort_order: number;
+    created_at: number;
+    updated_at: number;
+    completed_at: number | null;
+}
+
+export interface TaskLogRow {
+    id: number;
+    task_id: number;
+    note: string;
+    created_at: number;
+}
+
 // ============================================================
 // Query class with prepared statements
 // ============================================================
@@ -445,6 +466,14 @@ export class Queries {
     private _getProjectFilesByType?: Database.Statement;
     private _clearProjectFiles?: Database.Statement;
 
+    private _insertTask?: Database.Statement;
+    private _deleteTask?: Database.Statement;
+    private _getTaskById?: Database.Statement;
+    private _getTasksByStatus?: Database.Statement;
+    private _getAllTasks?: Database.Statement;
+    private _insertTaskLog?: Database.Statement;
+    private _getTaskLog?: Database.Statement;
+
     insertProjectFile(path: string, type: ProjectFileRow['type'], extension: string | null, indexed: boolean): void {
         this._insertProjectFile ??= this.db.prepare(
             'INSERT OR REPLACE INTO project_files (path, type, extension, indexed) VALUES (?, ?, ?, ?)'
@@ -469,6 +498,91 @@ export class Queries {
     clearProjectFiles(): void {
         this._clearProjectFiles ??= this.db.prepare('DELETE FROM project_files');
         this._clearProjectFiles.run();
+    }
+
+    // --------------------------------------------------------
+    // Tasks
+    // --------------------------------------------------------
+
+    insertTask(
+        title: string,
+        description: string | null,
+        priority: 1 | 2 | 3,
+        status: 'backlog' | 'active' | 'done' | 'cancelled',
+        tags: string | null,
+        source: string | null,
+        sortOrder: number
+    ): number {
+        this._insertTask ??= this.db.prepare(
+            'INSERT INTO tasks (title, description, priority, status, tags, source, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        const now = Date.now();
+        const result = this._insertTask.run(title, description, priority, status, tags, source, sortOrder, now, now);
+        return result.lastInsertRowid as number;
+    }
+
+    updateTask(id: number, fields: Partial<Pick<TaskRow, 'title' | 'description' | 'priority' | 'status' | 'tags' | 'source' | 'sort_order'>>): boolean {
+        const sets: string[] = [];
+        const values: unknown[] = [];
+        for (const [key, value] of Object.entries(fields)) {
+            sets.push(`${key} = ?`);
+            values.push(value);
+        }
+        if (sets.length === 0) return false;
+        sets.push('updated_at = ?');
+        values.push(Date.now());
+        if (fields.status === 'done') {
+            sets.push('completed_at = ?');
+            values.push(Date.now());
+        }
+        values.push(id);
+        const sql = `UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`;
+        const result = this.db.prepare(sql).run(...values);
+        return result.changes > 0;
+    }
+
+    deleteTask(id: number): boolean {
+        this._deleteTask ??= this.db.prepare('DELETE FROM tasks WHERE id = ?');
+        const result = this._deleteTask.run(id);
+        return result.changes > 0;
+    }
+
+    getTaskById(id: number): TaskRow | undefined {
+        this._getTaskById ??= this.db.prepare('SELECT * FROM tasks WHERE id = ?');
+        return this._getTaskById.get(id) as TaskRow | undefined;
+    }
+
+    getAllTasks(): TaskRow[] {
+        this._getAllTasks ??= this.db.prepare(
+            'SELECT * FROM tasks ORDER BY CASE status WHEN \'active\' THEN 0 WHEN \'backlog\' THEN 1 WHEN \'done\' THEN 2 END, priority ASC, sort_order ASC, created_at DESC'
+        );
+        return this._getAllTasks.all() as TaskRow[];
+    }
+
+    getTasksByStatus(status: string): TaskRow[] {
+        this._getTasksByStatus ??= this.db.prepare(
+            'SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, sort_order ASC, created_at DESC'
+        );
+        return this._getTasksByStatus.all(status) as TaskRow[];
+    }
+
+    // --------------------------------------------------------
+    // Task Log
+    // --------------------------------------------------------
+
+    insertTaskLog(taskId: number, note: string): number {
+        this._insertTaskLog ??= this.db.prepare(
+            'INSERT INTO task_log (task_id, note, created_at) VALUES (?, ?, ?)'
+        );
+        const result = this._insertTaskLog.run(taskId, note, Date.now());
+        return result.lastInsertRowid as number;
+    }
+
+    getTaskLog(taskId: number): TaskLogRow[] {
+        this._getTaskLog ??= this.db.prepare(
+            'SELECT * FROM task_log WHERE task_id = ? ORDER BY created_at DESC'
+        );
+        return this._getTaskLog.all(taskId) as TaskLogRow[];
     }
 }
 

@@ -41,7 +41,7 @@ export interface InitResult {
 // Default patterns
 // ============================================================
 
-const DEFAULT_EXCLUDE = [
+export const DEFAULT_EXCLUDE = [
     // Package managers
     '**/node_modules/**',
     '**/packages/**',
@@ -87,7 +87,7 @@ const DEFAULT_EXCLUDE = [
 // .gitignore support
 // ============================================================
 
-function readGitignore(projectPath: string): string[] {
+export function readGitignore(projectPath: string): string[] {
     const gitignorePath = join(projectPath, '.gitignore');
     if (!existsSync(gitignorePath)) return [];
 

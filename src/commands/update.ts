@@ -9,10 +9,12 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { minimatch } from 'minimatch';
 import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
 import { openDatabase, createQueries, type AiDexDatabase, type Queries } from '../db/index.js';
 import { extract } from '../parser/index.js';
+import { DEFAULT_EXCLUDE, readGitignore } from './init.js';
 
 // ============================================================
 // Types
@@ -75,6 +77,25 @@ export function update(params: UpdateParams): UpdateResult {
             typesUpdated: 0,
             durationMs: Date.now() - startTime,
             error: `File does not exist: ${relativePath}`,
+        };
+    }
+
+    // Check if file is excluded (build/, node_modules/, .gitignore patterns, etc.)
+    const gitignorePatterns = readGitignore(projectPath);
+    const excludePatterns = [...DEFAULT_EXCLUDE, ...gitignorePatterns];
+    const isExcluded = excludePatterns.some(pattern =>
+        minimatch(relativePath, pattern, { dot: true })
+    );
+    if (isExcluded) {
+        return {
+            success: false,
+            file: relativePath,
+            itemsAdded: 0,
+            itemsRemoved: 0,
+            methodsUpdated: 0,
+            typesUpdated: 0,
+            durationMs: Date.now() - startTime,
+            error: `File is excluded by pattern: ${relativePath}`,
         };
     }
 
