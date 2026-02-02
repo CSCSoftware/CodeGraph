@@ -750,13 +750,13 @@ function getViewerHTML(projectPath: string): string {
         .tab {
             padding: 10px 20px;
             cursor: pointer;
-            color: var(--text-muted);
+            color: var(--text-primary);
             border-bottom: 2px solid transparent;
             transition: all 0.2s;
         }
 
         .tab:hover {
-            color: var(--text-secondary);
+            color: var(--accent);
             background: rgba(122, 162, 247, 0.1);
         }
 
