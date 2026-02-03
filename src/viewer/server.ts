@@ -1067,6 +1067,36 @@ function getViewerHTML(projectPath: string): string {
         .task-btn-done:hover { background: var(--accent-green, #4caf50); color: #fff; }
         .task-btn-cancel { border-color: var(--accent-red); }
         .task-btn-cancel:hover { background: var(--accent-red); color: #fff; }
+        .task-group-toggle {
+            display: inline-flex; gap: 0; margin-left: 12px; font-size: 0.8em;
+            border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+        }
+        .task-group-toggle button {
+            padding: 3px 10px; border: none; background: var(--bg-secondary);
+            color: var(--text-muted); cursor: pointer; font-size: 1em;
+        }
+        .task-group-toggle button.active {
+            background: var(--accent-purple); color: #fff;
+        }
+        .task-group-toggle button:hover:not(.active) {
+            background: var(--border); color: var(--text-primary);
+        }
+        .task-tag-group-header {
+            color: var(--accent-cyan); font-size: 1em; font-weight: 600;
+            margin: 20px 0 8px 0; padding: 6px 0; border-bottom: 1px solid var(--border);
+            cursor: pointer; user-select: none;
+        }
+        .task-tag-group-header:first-of-type { margin-top: 0; }
+        .task-tag-group-header:hover { color: var(--text-primary); }
+        .task-tag-group.collapsed .task-list { display: none; }
+        .task-status-badge {
+            font-size: 0.75em; padding: 1px 6px; border-radius: 3px;
+            margin-left: 8px; font-weight: 400;
+        }
+        .task-status-badge.status-active { color: var(--accent-green, #4caf50); border: 1px solid var(--accent-green, #4caf50); }
+        .task-status-badge.status-backlog { color: var(--text-muted); border: 1px solid var(--border); }
+        .task-status-badge.status-done { color: var(--text-muted); border: 1px solid var(--border); }
+        .task-status-badge.status-cancelled { color: var(--accent-red); border: 1px solid var(--accent-red); }
     </style>
 </head>
 <body>
@@ -1385,17 +1415,47 @@ function getViewerHTML(projectPath: string): string {
             return div.innerHTML;
         }
 
+        let taskGroupMode = localStorage.getItem('aidex-task-group') || 'status';
+
+        function setTaskGroupMode(mode) {
+            taskGroupMode = mode;
+            localStorage.setItem('aidex-task-group', mode);
+            if (cachedTasks) renderTasks(cachedTasks);
+        }
+
         function renderTasks(taskList) {
             const detail = document.getElementById('detail');
             const priorityIcon = { 1: '\\u{1F534}', 2: '\\u{1F7E1}', 3: '\\u26AA' };
             const priorityLabel = { 1: 'High', 2: 'Medium', 3: 'Low' };
 
+            let html = '<h2 style="display:flex;align-items:center">Task Backlog (' + taskList.length + ')';
+            html += '<span class="task-group-toggle">';
+            html += '<button onclick="setTaskGroupMode(\\'status\\')" class="' + (taskGroupMode === 'status' ? 'active' : '') + '">Status</button>';
+            html += '<button onclick="setTaskGroupMode(\\'tags\\')" class="' + (taskGroupMode === 'tags' ? 'active' : '') + '">Tags</button>';
+            html += '</span></h2>';
+
+            if (taskList.length === 0) {
+                html += '<div class="empty-state"><p>No tasks yet.</p><p style="margin-top:8px;font-size:0.9em">Use <code>aidex_task</code> to create tasks from the chat.</p></div>';
+                detail.innerHTML = html;
+                return;
+            }
+
+            if (taskGroupMode === 'tags') {
+                html += renderTasksByTags(taskList, priorityIcon, priorityLabel);
+            } else {
+                html += renderTasksByStatus(taskList, priorityIcon, priorityLabel);
+            }
+
+            detail.innerHTML = html;
+        }
+
+        function renderTasksByStatus(taskList, priorityIcon, priorityLabel) {
             const active = taskList.filter(t => t.status === 'active');
             const backlog = taskList.filter(t => t.status === 'backlog');
             const done = taskList.filter(t => t.status === 'done');
             const cancelled = taskList.filter(t => t.status === 'cancelled');
 
-            let html = '<h2>Task Backlog (' + taskList.length + ')</h2>';
+            let html = '';
 
             if (active.length > 0) {
                 html += '<div class="task-section-header">Active (' + active.length + ')</div>';
@@ -1425,16 +1485,60 @@ function getViewerHTML(projectPath: string): string {
                 html += '</ul>';
             }
 
-            if (taskList.length === 0) {
-                html += '<div class="empty-state"><p>No tasks yet.</p><p style="margin-top:8px;font-size:0.9em">Use <code>aidex_task</code> to create tasks from the chat.</p></div>';
-            }
-
-            detail.innerHTML = html;
+            return html;
         }
 
-        function renderTaskItem(t, priorityIcon, priorityLabel) {
+        const tagIcons = { marketing: '\\u{1F4E3}', release: '\\u{1F4E6}', docs: '\\u{1F4C4}', viewer: '\\u{1F5A5}', test: '\\u{1F9EA}', bug: '\\u{1F41B}', feature: '\\u2728', social: '\\u{1F310}', content: '\\u270D\\uFE0F', github: '\\u{1F4BB}' };
+
+        function renderTasksByTags(taskList, priorityIcon, priorityLabel) {
+            const groups = {};
+            const statusOrder = { active: 0, backlog: 1, done: 2, cancelled: 3 };
+
+            for (const t of taskList) {
+                const firstTag = t.tags ? t.tags.split(',')[0].trim() : 'ungrouped';
+                if (!groups[firstTag]) groups[firstTag] = [];
+                groups[firstTag].push(t);
+            }
+
+            // Sort groups: by number of active/backlog tasks descending
+            const sortedTags = Object.keys(groups).sort((a, b) => {
+                if (a === 'ungrouped') return 1;
+                if (b === 'ungrouped') return -1;
+                const aActive = groups[a].filter(t => t.status === 'active' || t.status === 'backlog').length;
+                const bActive = groups[b].filter(t => t.status === 'active' || t.status === 'backlog').length;
+                return bActive - aActive;
+            });
+
+            let html = '';
+            for (const tag of sortedTags) {
+                const tasks = groups[tag];
+                // Sort within group: status then priority
+                tasks.sort((a, b) => (statusOrder[a.status] - statusOrder[b.status]) || (a.priority - b.priority));
+
+                const openCount = tasks.filter(t => t.status === 'active' || t.status === 'backlog').length;
+                const doneCount = tasks.length - openCount;
+                const icon = tagIcons[tag] || '\\u{1F3F7}\\uFE0F';
+                const collapsed = openCount === 0 ? ' collapsed' : '';
+
+                html += '<div class="task-tag-group' + collapsed + '">';
+                html += '<div class="task-tag-group-header" onclick="this.parentElement.classList.toggle(\\'collapsed\\')">';
+                html += icon + ' ' + escapeHtml(tag) + ' (' + openCount + (doneCount > 0 ? '+' + doneCount : '') + ') ';
+                html += (collapsed ? '\\u25B8' : '\\u25BE');
+                html += '</div>';
+                html += '<ul class="task-list">';
+                for (const t of tasks) html += renderTaskItem(t, priorityIcon, priorityLabel, true);
+                html += '</ul>';
+                html += '</div>';
+            }
+
+            return html;
+        }
+
+        function renderTaskItem(t, priorityIcon, priorityLabel, showStatus) {
             let html = '<li class="task-item priority-' + t.priority + ' status-' + t.status + '">';
-            html += '<div class="task-title">' + (priorityIcon[t.priority] || '') + ' #' + t.id + ' ' + escapeHtml(t.title) + '</div>';
+            html += '<div class="task-title">' + (priorityIcon[t.priority] || '') + ' #' + t.id + ' ' + escapeHtml(t.title);
+            if (showStatus) html += '<span class="task-status-badge status-' + t.status + '">' + t.status + '</span>';
+            html += '</div>';
             if (t.description) {
                 html += '<div class="task-description">' + escapeHtml(t.description) + '</div>';
             }
