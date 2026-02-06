@@ -32,6 +32,9 @@ Complete reference for all AiDex MCP tools.
 - [Task Management](#task-management)
   - [aidex_task](#aidex_task)
   - [aidex_tasks](#aidex_tasks)
+- [Screenshots](#screenshots)
+  - [aidex_screenshot](#aidex_screenshot)
+  - [aidex_windows](#aidex_windows)
 
 ---
 
@@ -716,6 +719,109 @@ List and filter tasks in the project backlog. Returns tasks grouped by status an
 
 // High priority bugs
 { "path": ".", "priority": 1, "tag": "bug" }
+```
+
+---
+
+## Screenshots
+
+### aidex_screenshot
+
+Take a screenshot of the screen, a window, or an interactive region selection. Returns the file path so you can immediately `Read` the image. **No project index required.**
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `mode` | string | - | `fullscreen` (default), `active_window`, `window`, `region` |
+| `window_title` | string | for mode=window | Window title substring to match (use `aidex_windows` to find titles) |
+| `monitor` | number | - | Monitor index (0-based, default: primary). Only for fullscreen mode |
+| `delay` | number | - | Seconds to wait before capturing (e.g., `3` to switch windows first) |
+| `filename` | string | - | Custom filename (default: `aidex-screenshot.png`). Overwrites if exists |
+| `save_path` | string | - | Custom directory (default: system temp directory) |
+
+**Capture Modes:**
+
+| Mode | Description | Platform tools |
+|------|-------------|----------------|
+| `fullscreen` | Entire screen (primary monitor or selected) | PowerShell / screencapture / maim |
+| `active_window` | Currently focused window | Win32 API / screencapture / xdotool+maim |
+| `window` | Specific window by title substring | EnumWindows / osascript / xdotool |
+| `region` | User draws a rectangle interactively | WinForms overlay / screencapture -i / maim -s |
+
+**Returns:**
+- `file_path`: Absolute path to the saved PNG file
+- `mode`: Which capture mode was used
+- `monitor`: Which monitor was captured (if specified)
+
+**Examples:**
+
+```json
+// Fullscreen (default)
+{}
+
+// Active window
+{ "mode": "active_window" }
+
+// Specific window by title
+{ "mode": "window", "window_title": "Visual Studio Code" }
+
+// Interactive region selection
+{ "mode": "region" }
+
+// Fullscreen with delay and custom path
+{ "delay": 3, "filename": "bug-report.png", "save_path": "/tmp/screenshots" }
+
+// Second monitor
+{ "monitor": 1 }
+```
+
+**Platform Requirements:**
+
+| Platform | Required | Optional |
+|----------|----------|----------|
+| Windows | PowerShell (built-in) | - |
+| macOS | screencapture (built-in) | osascript (built-in) |
+| Linux | maim OR scrot | xdotool, wmctrl, slop (for region) |
+
+---
+
+### aidex_windows
+
+List all open windows with their titles, PIDs, and process names. Use to find window titles for `aidex_screenshot` with `mode="window"`. **No project index required.**
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `filter` | string | - | Substring to filter window titles (case-insensitive) |
+
+**Returns:**
+- List of windows with `title`, `pid`, `process_name`
+- Platform identifier
+
+**Examples:**
+
+```json
+// All windows
+{}
+
+// Filter by title
+{ "filter": "chrome" }
+
+// Find a specific app
+{ "filter": "Visual Studio" }
+```
+
+**Output example:**
+```
+# Open Windows (5)
+
+Platform: win32
+
+- **Visual Studio Code** (Code) [PID: 1234]
+- **Chrome - Google** (chrome) [PID: 5678]
+- **Windows Terminal** (WindowsTerminal) [PID: 9012]
 ```
 
 ---

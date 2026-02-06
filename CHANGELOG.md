@@ -2,6 +2,30 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.9.0] - 2026-02-06
+
+### Added
+- **Cross-Platform Screenshots**: New `aidex_screenshot` tool for capturing screenshots directly from AI assistants
+  - 4 capture modes: `fullscreen`, `active_window`, `window` (by title), `region` (interactive selection)
+  - Cross-platform: Windows (PowerShell + .NET), macOS (screencapture), Linux (maim/scrot)
+  - Multi-monitor support (select monitor by index)
+  - Delay parameter (wait N seconds before capture)
+  - Default: Saves to temp directory with fixed filename (overwrites for quick iteration)
+  - Custom filename and save path supported
+  - Returns file path so AI can immediately `Read` the image
+  - No project index required - standalone utility
+- **Window Listing**: New `aidex_windows` tool to list all open windows
+  - Shows title, PID, and process name
+  - Optional substring filter (case-insensitive)
+  - Helper for `aidex_screenshot` mode="window"
+
+### Technical
+- New directory module: `src/commands/screenshot/` with platform-specific implementations
+- Windows: PowerShell scripts written to temp .ps1 files (avoids quoting issues with inline C#)
+- macOS: Uses native `screencapture` command (interactive selection built-in)
+- Linux: Uses `maim` (preferred) with `scrot` fallback; `xdotool`/`wmctrl` for window operations
+- Synchronous delay via `Atomics.wait` (Node >= 18)
+
 ## [1.8.1] - 2026-02-02
 
 ### Added

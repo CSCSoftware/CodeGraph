@@ -85,6 +85,7 @@ The index lives in `.aidex/index.db` (SQLite) - fast, portable, no external depe
 
 ## Features
 
+- **Screenshots**: Cross-platform screenshot capture (fullscreen, window, region) with auto-path for instant AI viewing
 - **Smart Extraction**: Uses Tree-sitter to parse code properly - indexes identifiers, not keywords
 - **Method Signatures**: Get function prototypes without reading implementations
 - **Project Summary**: Auto-detected entry points, main classes, language breakdown
@@ -229,6 +230,8 @@ aidex_init({ path: "/path/to/your/project" })
 | `aidex_viewer` | Open interactive project tree in browser |
 | `aidex_task` | Create, read, update, delete tasks with priority and tags |
 | `aidex_tasks` | List and filter tasks by status, priority, or tag |
+| `aidex_screenshot` | Take a screenshot (fullscreen, window, region) |
+| `aidex_windows` | List open windows for screenshot targeting |
 
 ## Time-based Filtering
 
@@ -299,6 +302,30 @@ aidex_tasks({ path: ".", status: "active" })
 - **Persistent**: Tasks survive between sessions, stored in `.aidex/index.db`
 
 Your AI assistant can create tasks while working (*"found a bug in the parser, add it to the backlog"*), track progress, and pick up where you left off next session.
+
+## Screenshots
+
+Take cross-platform screenshots directly from your AI assistant - no manual file paths needed:
+
+```
+aidex_screenshot()                                           # Full screen
+aidex_screenshot({ mode: "active_window" })                  # Active window
+aidex_screenshot({ mode: "window", window_title: "VS Code" }) # Specific window
+aidex_screenshot({ mode: "region" })                         # Interactive selection
+aidex_windows({ filter: "chrome" })                          # Find window titles
+```
+
+**Features:**
+- **4 capture modes**: Fullscreen, active window, specific window (by title), interactive region selection
+- **Cross-platform**: Windows (PowerShell), macOS (screencapture), Linux (maim/scrot)
+- **Multi-monitor**: Select which monitor to capture
+- **Delay**: Wait N seconds before capturing (e.g., to open a menu first)
+- **Auto-path**: Default saves to temp directory with fixed filename - your AI reads it immediately
+- **No index required**: Works standalone, no `.aidex/` needed
+
+Use `aidex_windows` to find the exact window title, then `aidex_screenshot` with `mode: "window"` to capture it.
+
+**Future:** Screenshots will be storable in the AiDex database - attach them to tasks for bug documentation, capture before/after states for refactoring, or persist GUI evidence across sessions.
 
 ## Interactive Viewer
 

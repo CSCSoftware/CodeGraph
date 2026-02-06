@@ -13,3 +13,4 @@ export { files, type FilesParams, type FilesResult, type ProjectFile } from './f
 export { note, getSessionNote, type NoteParams, type NoteResult } from './note.js';
 export { session, updateSessionHeartbeat, getSessionInfo, formatSessionTime, formatDuration, type SessionParams, type SessionResult, type SessionInfo, type ChangedFile } from './session.js';
 export { task, tasks, type TaskParams, type TaskResult, type TasksParams, type TasksResult, type TaskAction } from './task.js';
+export { screenshot, listWindows, type ScreenshotParams, type ScreenshotResult, type ScreenshotMode, type WindowsParams, type WindowsResult, type WindowInfo } from './screenshot/index.js';

@@ -5,7 +5,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, type QueryMode, type TaskAction } from '../commands/index.js';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, screenshot, listWindows, type QueryMode, type TaskAction, type ScreenshotMode } from '../commands/index.js';
 import type { TaskRow } from '../db/index.js';
 import { openDatabase } from '../db/index.js';
 import { startViewer, stopViewer } from '../viewer/index.js';
@@ -484,6 +484,55 @@ export function registerTools(): Tool[] {
                 required: ['path'],
             },
         },
+        {
+            name: `${TOOL_PREFIX}screenshot`,
+            description: 'Take a screenshot of the screen, active window, a specific window, or an interactive region selection. Returns the file path so you can immediately Read the image. No project index required.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    mode: {
+                        type: 'string',
+                        enum: ['fullscreen', 'active_window', 'window', 'region'],
+                        description: 'Capture mode: fullscreen (default), active_window, window (by title), or region (interactive selection)',
+                    },
+                    window_title: {
+                        type: 'string',
+                        description: 'Window title substring to match (required when mode="window"). Use aidex_windows to find titles.',
+                    },
+                    monitor: {
+                        type: 'number',
+                        description: 'Monitor index (0-based, default: primary). Only applies to fullscreen mode.',
+                    },
+                    delay: {
+                        type: 'number',
+                        description: 'Seconds to wait before capturing (e.g., 3 to give time to switch windows)',
+                    },
+                    filename: {
+                        type: 'string',
+                        description: 'Custom filename (default: aidex-screenshot.png). Overwrites if exists.',
+                    },
+                    save_path: {
+                        type: 'string',
+                        description: 'Custom directory to save in (default: system temp directory)',
+                    },
+                },
+                required: [],
+            },
+        },
+        {
+            name: `${TOOL_PREFIX}windows`,
+            description: 'List all open windows with their titles, PIDs, and process names. Use this to find the exact window title for aidex_screenshot with mode="window". No project index required.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    filter: {
+                        type: 'string',
+                        description: 'Optional substring to filter window titles (case-insensitive)',
+                    },
+                },
+                required: [],
+            },
+        },
     ];
 }
 
@@ -555,6 +604,12 @@ export async function handleToolCall(
 
             case `${TOOL_PREFIX}tasks`:
                 return handleTasks(args);
+
+            case `${TOOL_PREFIX}screenshot`:
+                return handleScreenshot(args);
+
+            case `${TOOL_PREFIX}windows`:
+                return handleWindows(args);
 
             default:
                 return {
@@ -1628,5 +1683,71 @@ function handleTasks(args: Record<string, unknown>): { content: Array<{ type: st
 
     return {
         content: [{ type: 'text', text: msg.trimEnd() }],
+    };
+}
+
+/**
+ * Handle screenshot
+ */
+function handleScreenshot(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const result = screenshot({
+        mode: args.mode as ScreenshotMode | undefined,
+        window_title: args.window_title as string | undefined,
+        monitor: args.monitor as number | undefined,
+        delay: args.delay as number | undefined,
+        filename: args.filename as string | undefined,
+        save_path: args.save_path as string | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    let message = `Screenshot captured!\n\n`;
+    message += `**File:** ${result.file_path}\n`;
+    message += `**Mode:** ${result.mode}\n`;
+    if (result.monitor !== undefined) {
+        message += `**Monitor:** ${result.monitor}\n`;
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle windows listing
+ */
+function handleWindows(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const result = listWindows({
+        filter: args.filter as string | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.windows.length === 0) {
+        let msg = 'No windows found.';
+        if (args.filter) msg += ` (filter: "${args.filter}")`;
+        return {
+            content: [{ type: 'text', text: msg }],
+        };
+    }
+
+    let message = `# Open Windows (${result.windows.length})\n\n`;
+
+    for (const w of result.windows) {
+        message += `- **${w.title}**`;
+        if (w.process_name) message += ` (${w.process_name})`;
+        message += ` [PID: ${w.pid}]\n`;
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
     };
 }

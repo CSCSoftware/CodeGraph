@@ -2,7 +2,7 @@
 
 MCP Server für persistentes Code-Indexing. Ermöglicht Claude Code schnelle, präzise Suchen statt Grep/Glob.
 
-**Version:** 1.8.0 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/AiDex
+**Version:** 1.9.0 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/AiDex
 
 ## Build & Run
 
@@ -36,7 +36,7 @@ Registriert als MCP Server `aidex` (Prefix: `mcp__aidex__aidex_*`).
 **Nach Änderungen:** Build ausführen, dann Claude Code neu starten.
 **MCP-Name:** Server muss als `"aidex"` registriert sein → Prefix wird `mcp__aidex__aidex_*`.
 
-## Tools (20)
+## Tools (22)
 
 ### Suche & Index
 | Tool | Beschreibung |
@@ -82,6 +82,12 @@ Registriert als MCP Server `aidex` (Prefix: `mcp__aidex__aidex_*`).
 
 Status: `backlog → active → done | cancelled`
 
+### Screenshots (v1.9+)
+| Tool | Beschreibung |
+|------|--------------|
+| `aidex_screenshot` | Screenshot aufnehmen (fullscreen/active_window/window/region) |
+| `aidex_windows` | Offene Fenster auflisten (Helper für window-Modus) |
+
 ## Sprachen
 
 C# · TypeScript · JavaScript · Rust · Python · C · C++ · Java · Go · PHP · Ruby
@@ -98,6 +104,7 @@ src/
 │   ├── init.ts, query.ts, signature.ts, update.ts
 │   ├── summary.ts, link.ts, scan.ts, files.ts
 │   ├── session.ts, note.ts, task.ts
+│   ├── screenshot/              # Plattform-Screenshots
 │   └── viewer/server.ts
 ├── db/
 │   ├── database.ts       # SQLite (WAL)
@@ -167,6 +174,21 @@ aidex_tasks({ path: ".", status: "active", tag: "bug" })    # Gefiltert
 - Status: backlog → active → done | cancelled
 - Auto-Log bei Status-Änderungen und Task-Erstellung
 - Viewer: Tasks-Tab mit Priority-Farben, Done-Toggle, Cancelled-Sektion (durchgestrichen)
+
+### Screenshots (v1.9)
+```
+aidex_screenshot()                                             # Ganzer Bildschirm
+aidex_screenshot({ mode: "active_window" })                    # Aktives Fenster
+aidex_screenshot({ mode: "window", window_title: "VS Code" })  # Bestimmtes Fenster
+aidex_screenshot({ mode: "region" })                           # Rechteck aufziehen
+aidex_screenshot({ delay: 3 })                                 # 3 Sek. warten
+aidex_windows({ filter: "chrome" })                            # Fenster finden
+```
+- Kein Index nötig - standalone Tool
+- Cross-Platform: Windows (PowerShell), macOS (screencapture), Linux (maim/scrot)
+- Default: Speichert in `os.tmpdir()/aidex-screenshot.png` (überschreibt immer)
+- Optional: `filename` und `save_path` für andere Pfade
+- Rückgabe: Dateipfad → Claude kann sofort `Read` aufrufen
 
 ### Auto-Cleanup (v1.3.1)
 `aidex_init` entfernt automatisch Dateien die jetzt excluded sind (z.B. build/).
