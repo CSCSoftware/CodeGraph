@@ -172,17 +172,7 @@ $fullGraphics = [System.Drawing.Graphics]::FromImage($fullBitmap)
 $fullGraphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
 $fullGraphics.Dispose()
 
-# Create semi-transparent overlay with the screenshot as background
-$form = New-Object System.Windows.Forms.Form
-$form.FormBorderStyle = 'None'
-$form.StartPosition = 'Manual'
-$form.Location = $bounds.Location
-$form.Size = $bounds.Size
-$form.TopMost = $true
-$form.Cursor = [System.Windows.Forms.Cursors]::Cross
-$form.ShowInTaskbar = $false
-
-# Darken the background image
+# Darken the background image before creating the form
 $darkBitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
 $darkGraphics = [System.Drawing.Graphics]::FromImage($darkBitmap)
 $darkGraphics.DrawImage($fullBitmap, 0, 0)
@@ -190,7 +180,27 @@ $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(1
 $darkGraphics.FillRectangle($brush, 0, 0, $bounds.Width, $bounds.Height)
 $darkGraphics.Dispose()
 $brush.Dispose()
+
+# Create overlay form - start offscreen to avoid initial flash
+$form = New-Object System.Windows.Forms.Form
+$form.FormBorderStyle = 'None'
+$form.StartPosition = 'Manual'
+$form.Location = New-Object System.Drawing.Point(-99999, -99999)
+$form.Size = $bounds.Size
+$form.TopMost = $true
+$form.Cursor = [System.Windows.Forms.Cursors]::Cross
+$form.ShowInTaskbar = $false
+$form.BackColor = [System.Drawing.Color]::Black
 $form.BackgroundImage = $darkBitmap
+
+# Enable double-buffering to prevent flicker during repaints
+$form.GetType().GetProperty('DoubleBuffered', [System.Reflection.BindingFlags]'Instance,NonPublic').SetValue($form, $true)
+
+# Move form to correct position after first paint is complete
+$form.Add_Shown({
+    $form.Location = $bounds.Location
+    $form.Activate()
+})
 
 $script:startPoint = $null
 $script:currentPoint = $null
