@@ -43,3 +43,16 @@ nul
 
 # Code review (local only)
 CODE-REVIEW.md
+
+# Internal documents (not for public)
+docs/posts/
+FUTURE.md
+CODEGRAPH-SPEC.html
+MCP-API-REFERENCE.html
+.claude/PROJEKT-EINSTIEG.md
+
+# Internal scripts
+aidex-init-all.bat
+aidex-scan.bat
+npm-publish.bat
+server.json
