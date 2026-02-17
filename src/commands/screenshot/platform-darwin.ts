@@ -91,6 +91,21 @@ end tell`;
         });
     },
 
+    captureRect(filePath: string, x: number, y: number, width: number, height: number): void {
+        // Capture fullscreen then crop with sips
+        const tmpFile = filePath + '.tmp.png';
+        execSync(`screencapture -x "${tmpFile}"`, {
+            timeout: 10000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        // Crop using sips (built-in macOS tool)
+        execSync(`sips -c ${height} ${width} --cropOffset ${y} ${x} "${tmpFile}" --out "${filePath}"`, {
+            timeout: 10000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        try { execSync(`rm "${tmpFile}"`, { stdio: ['pipe', 'pipe', 'pipe'] }); } catch { /* ignore */ }
+    },
+
     captureRegion(filePath: string): void {
         // -i enables interactive selection (crosshair cursor)
         // User can press Space to toggle window/selection mode, Escape to cancel

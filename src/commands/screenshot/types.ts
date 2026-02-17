@@ -8,7 +8,7 @@
 // Screenshot Types
 // ============================================================
 
-export type ScreenshotMode = 'fullscreen' | 'active_window' | 'window' | 'region';
+export type ScreenshotMode = 'fullscreen' | 'active_window' | 'window' | 'region' | 'rect';
 
 export interface ScreenshotParams {
     mode?: ScreenshotMode;
@@ -17,6 +17,10 @@ export interface ScreenshotParams {
     delay?: number;
     filename?: string;
     save_path?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
 }
 
 export interface ScreenshotResult {
@@ -57,5 +61,6 @@ export interface PlatformScreenshot {
     captureActiveWindow(filePath: string): void;
     captureWindow(filePath: string, windowTitle: string): void;
     captureRegion(filePath: string): void;
+    captureRect(filePath: string, x: number, y: number, width: number, height: number): void;
     listWindows(): WindowInfo[];
 }

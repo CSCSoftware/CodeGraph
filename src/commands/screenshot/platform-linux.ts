@@ -140,6 +140,30 @@ export const linuxPlatform: PlatformScreenshot = {
         }
     },
 
+    captureRect(filePath: string, x: number, y: number, width: number, height: number): void {
+        const tool = requireTool('maim', 'scrot');
+        if (tool === 'maim') {
+            // maim -g WxH+X+Y captures a specific geometry
+            execSync(`maim -g ${width}x${height}+${x}+${y} "${filePath}"`, {
+                timeout: 10000,
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+        } else {
+            // scrot doesn't support rect natively, capture full then crop with ImageMagick
+            const tmpFile = filePath + '.tmp.png';
+            execSync(`scrot "${tmpFile}"`, {
+                timeout: 10000,
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            requireTool('convert'); // ImageMagick
+            execSync(`convert "${tmpFile}" -crop ${width}x${height}+${x}+${y} +repage "${filePath}"`, {
+                timeout: 10000,
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            try { execSync(`rm "${tmpFile}"`, { stdio: ['pipe', 'pipe', 'pipe'] }); } catch { /* ignore */ }
+        }
+    },
+
     captureRegion(filePath: string): void {
         const tool = requireTool('maim', 'scrot');
         if (tool === 'maim') {

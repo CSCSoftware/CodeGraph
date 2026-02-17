@@ -67,6 +67,25 @@ export function screenshot(params: ScreenshotParams): ScreenshotResult {
         };
     }
 
+    if (mode === 'rect') {
+        if (params.x === undefined || params.y === undefined || params.width === undefined || params.height === undefined) {
+            return {
+                success: false,
+                file_path: '',
+                mode,
+                error: 'x, y, width, and height are all required when mode is "rect".',
+            };
+        }
+        if (params.width <= 0 || params.height <= 0) {
+            return {
+                success: false,
+                file_path: '',
+                mode,
+                error: 'width and height must be positive.',
+            };
+        }
+    }
+
     // Resolve file path
     const dir = params.save_path ?? tmpdir();
     const filename = params.filename ?? DEFAULT_FILENAME;
@@ -97,6 +116,9 @@ export function screenshot(params: ScreenshotParams): ScreenshotResult {
                 break;
             case 'region':
                 impl.captureRegion(filePath);
+                break;
+            case 'rect':
+                impl.captureRect(filePath, params.x!, params.y!, params.width!, params.height!);
                 break;
         }
 

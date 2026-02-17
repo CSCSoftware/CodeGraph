@@ -486,14 +486,14 @@ export function registerTools(): Tool[] {
         },
         {
             name: `${TOOL_PREFIX}screenshot`,
-            description: 'Take a screenshot of the screen, active window, a specific window, or an interactive region selection. Returns the file path so you can immediately Read the image. No project index required.',
+            description: 'Take a screenshot of the screen, active window, a specific window, an interactive region selection, or a specific rectangle by coordinates. Returns the file path so you can immediately Read the image. No project index required.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     mode: {
                         type: 'string',
-                        enum: ['fullscreen', 'active_window', 'window', 'region'],
-                        description: 'Capture mode: fullscreen (default), active_window, window (by title), or region (interactive selection)',
+                        enum: ['fullscreen', 'active_window', 'window', 'region', 'rect'],
+                        description: 'Capture mode: fullscreen (default), active_window, window (by title), region (interactive selection), or rect (specific coordinates)',
                     },
                     window_title: {
                         type: 'string',
@@ -514,6 +514,22 @@ export function registerTools(): Tool[] {
                     save_path: {
                         type: 'string',
                         description: 'Custom directory to save in (default: system temp directory)',
+                    },
+                    x: {
+                        type: 'number',
+                        description: 'X coordinate of the capture rectangle (required when mode="rect")',
+                    },
+                    y: {
+                        type: 'number',
+                        description: 'Y coordinate of the capture rectangle (required when mode="rect")',
+                    },
+                    width: {
+                        type: 'number',
+                        description: 'Width of the capture rectangle in pixels (required when mode="rect")',
+                    },
+                    height: {
+                        type: 'number',
+                        description: 'Height of the capture rectangle in pixels (required when mode="rect")',
                     },
                 },
                 required: [],
@@ -1697,6 +1713,10 @@ function handleScreenshot(args: Record<string, unknown>): { content: Array<{ typ
         delay: args.delay as number | undefined,
         filename: args.filename as string | undefined,
         save_path: args.save_path as string | undefined,
+        x: args.x as number | undefined,
+        y: args.y as number | undefined,
+        width: args.width as number | undefined,
+        height: args.height as number | undefined,
     });
 
     if (!result.success) {

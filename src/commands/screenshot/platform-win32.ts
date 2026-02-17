@@ -277,6 +277,21 @@ $darkBitmap.Dispose()
 `;
 }
 
+function rectScript(filePath: string, x: number, y: number, width: number, height: number): string {
+    const escapedPath = filePath.replace(/\\/g, '\\\\').replace(/'/g, "''");
+
+    return `
+Add-Type -AssemblyName System.Drawing
+
+$bitmap = New-Object System.Drawing.Bitmap(${width}, ${height})
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.CopyFromScreen(${x}, ${y}, 0, 0, (New-Object System.Drawing.Size(${width}, ${height})))
+$bitmap.Save('${escapedPath}', [System.Drawing.Imaging.ImageFormat]::Png)
+$graphics.Dispose()
+$bitmap.Dispose()
+`;
+}
+
 function listWindowsScript(): string {
     return `
 Get-Process | Where-Object { $_.MainWindowTitle -ne '' } |
@@ -304,6 +319,10 @@ export const win32Platform: PlatformScreenshot = {
 
     captureRegion(filePath: string): void {
         runPowerShell(regionScript(filePath), 120000);
+    },
+
+    captureRect(filePath: string, x: number, y: number, width: number, height: number): void {
+        runPowerShell(rectScript(filePath, x, y, width, height));
     },
 
     listWindows(): WindowInfo[] {
