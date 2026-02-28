@@ -8,6 +8,7 @@
  * - Auto-generated notes before session end
  *
  * v1.3.0 - Session tracking integration
+ * v1.10.0 - Note history: archived notes are searchable
  */
 
 import { existsSync } from 'fs';
@@ -24,12 +25,23 @@ export interface NoteParams {
     note?: string;      // If provided, sets the note. If omitted, reads current note.
     append?: boolean;   // If true, appends to existing note instead of replacing
     clear?: boolean;    // If true, clears the note
+    history?: boolean;  // If true, shows archived note history
+    search?: string;    // If provided, searches note history for this term
+    limit?: number;     // Max history entries to return (default 20)
+}
+
+export interface NoteHistoryEntry {
+    id: number;
+    note: string;
+    created_at: number;
 }
 
 export interface NoteResult {
     success: boolean;
     note: string | null;
-    action: 'read' | 'write' | 'append' | 'clear';
+    action: 'read' | 'write' | 'append' | 'clear' | 'history' | 'search';
+    history?: NoteHistoryEntry[];
+    historyCount?: number;
     error?: string;
 }
 
@@ -44,7 +56,7 @@ const NOTE_KEY = 'session_note';
 // ============================================================
 
 export function note(params: NoteParams): NoteResult {
-    const { path: projectPath, note: newNote, append, clear } = params;
+    const { path: projectPath, note: newNote, append, clear, history, search, limit } = params;
 
     // Validate project path
     const dbPath = join(projectPath, INDEX_DIR, 'index.db');
@@ -58,13 +70,59 @@ export function note(params: NoteParams): NoteResult {
         };
     }
 
-    // Open database (read-write for writing, read-only for reading)
+    // History and search need write access too (for auto-migration)
     const isWriteOperation = newNote !== undefined || clear;
-    const db = openDatabase(dbPath, !isWriteOperation);
+    const needsReadWrite = isWriteOperation || history || search !== undefined;
+    const db = openDatabase(dbPath, !needsReadWrite);
 
     try {
+        // Auto-migrate: ensure note_history table exists (for DBs created before v1.10)
+        if (needsReadWrite) {
+            db.getDb().exec(`
+                CREATE TABLE IF NOT EXISTS note_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    note TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_note_history_created ON note_history(created_at);
+            `);
+        }
+
+        // --- Search history ---
+        if (search !== undefined) {
+            const results = db.searchNoteHistory(search, limit ?? 20);
+            const totalCount = db.countNoteHistory();
+            db.close();
+            return {
+                success: true,
+                note: null,
+                action: 'search',
+                history: results,
+                historyCount: totalCount,
+            };
+        }
+
+        // --- Show history ---
+        if (history) {
+            const results = db.getNoteHistory(limit ?? 20);
+            const totalCount = db.countNoteHistory();
+            db.close();
+            return {
+                success: true,
+                note: null,
+                action: 'history',
+                history: results,
+                historyCount: totalCount,
+            };
+        }
+
+        // --- Clear ---
         if (clear) {
-            // Clear the note
+            // Archive current note before clearing
+            const existing = db.getMetadata(NOTE_KEY);
+            if (existing) {
+                db.archiveNote(existing);
+            }
             db.deleteMetadata(NOTE_KEY);
             db.close();
             return {
@@ -74,19 +132,23 @@ export function note(params: NoteParams): NoteResult {
             };
         }
 
+        // --- Write or append ---
         if (newNote !== undefined) {
-            // Write or append note
             let finalNote = newNote;
 
             if (append) {
-                // Get existing note first
                 const existing = db.getMetadata(NOTE_KEY);
                 if (existing) {
                     finalNote = existing + '\n' + newNote;
                 }
+            } else {
+                // Overwrite: archive the old note first
+                const existing = db.getMetadata(NOTE_KEY);
+                if (existing) {
+                    db.archiveNote(existing);
+                }
             }
 
-            // Save the note
             db.setMetadata(NOTE_KEY, finalNote);
             db.close();
 
@@ -97,7 +159,7 @@ export function note(params: NoteParams): NoteResult {
             };
         }
 
-        // Read note
+        // --- Read ---
         const currentNote = db.getMetadata(NOTE_KEY);
         db.close();
 

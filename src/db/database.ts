@@ -71,6 +71,44 @@ export class AiDexDatabase {
         this.db.prepare('DELETE FROM metadata WHERE key = ?').run(key);
     }
 
+    // ============================================================
+    // Note History
+    // ============================================================
+
+    /**
+     * Archive a note to the history table (called before overwriting)
+     */
+    archiveNote(note: string): void {
+        this.db.prepare(
+            'INSERT INTO note_history (note, created_at) VALUES (?, ?)'
+        ).run(note, Date.now());
+    }
+
+    /**
+     * Get note history entries, newest first
+     */
+    getNoteHistory(limit = 50): Array<{ id: number; note: string; created_at: number }> {
+        return this.db.prepare(
+            'SELECT id, note, created_at FROM note_history ORDER BY created_at DESC LIMIT ?'
+        ).all(limit) as Array<{ id: number; note: string; created_at: number }>;
+    }
+
+    /**
+     * Search note history by text (case-insensitive LIKE)
+     */
+    searchNoteHistory(query: string, limit = 20): Array<{ id: number; note: string; created_at: number }> {
+        return this.db.prepare(
+            'SELECT id, note, created_at FROM note_history WHERE note LIKE ? ORDER BY created_at DESC LIMIT ?'
+        ).all(`%${query}%`, limit) as Array<{ id: number; note: string; created_at: number }>;
+    }
+
+    /**
+     * Count note history entries
+     */
+    countNoteHistory(): number {
+        return (this.db.prepare('SELECT COUNT(*) as c FROM note_history').get() as { c: number }).c;
+    }
+
     /**
      * Run a function in a transaction
      */

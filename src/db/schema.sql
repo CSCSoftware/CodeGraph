@@ -161,6 +161,17 @@ CREATE TABLE IF NOT EXISTS task_log (
 CREATE INDEX IF NOT EXISTS idx_task_log_task ON task_log(task_id);
 
 -- ------------------------------------------------------------
+-- Note History (archiviert überschriebene Session-Notizen)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS note_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_history_created ON note_history(created_at);
+
+-- ------------------------------------------------------------
 -- Metadaten
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS metadata (

@@ -342,7 +342,7 @@ export function registerTools(): Tool[] {
         },
         {
             name: `${TOOL_PREFIX}note`,
-            description: `Read or write a session note for the project. Use this to leave reminders for the next session (e.g., "Test the glob fix", "Refactor X"). Notes persist in the ${PRODUCT_NAME} database and are shown when querying the project.`,
+            description: `Read or write a session note for the project. Notes persist in the ${PRODUCT_NAME} database. When a note is overwritten or cleared, the old note is automatically archived. Use history/search to browse past notes.`,
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -361,6 +361,18 @@ export function registerTools(): Tool[] {
                     clear: {
                         type: 'boolean',
                         description: 'If true, clears the note (default: false)',
+                    },
+                    history: {
+                        type: 'boolean',
+                        description: 'If true, shows archived note history (newest first)',
+                    },
+                    search: {
+                        type: 'string',
+                        description: 'Search term to find in note history (case-insensitive)',
+                    },
+                    limit: {
+                        type: 'number',
+                        description: 'Max history/search entries to return (default: 20)',
                     },
                 },
                 required: ['path'],
@@ -1424,6 +1436,9 @@ function handleNote(args: Record<string, unknown>): { content: Array<{ type: str
         note: args.note as string | undefined,
         append: args.append as boolean | undefined,
         clear: args.clear as boolean | undefined,
+        history: args.history as boolean | undefined,
+        search: args.search as string | undefined,
+        limit: args.limit as number | undefined,
     });
 
     if (!result.success) {
@@ -1435,18 +1450,44 @@ function handleNote(args: Record<string, unknown>): { content: Array<{ type: str
     switch (result.action) {
         case 'clear':
             return {
-                content: [{ type: 'text', text: '✓ Session note cleared.' }],
+                content: [{ type: 'text', text: '✓ Session note cleared (old note archived).' }],
             };
 
         case 'write':
             return {
-                content: [{ type: 'text', text: `✓ Session note saved:\n\n${result.note}` }],
+                content: [{ type: 'text', text: `✓ Session note saved (old note archived):\n\n${result.note}` }],
             };
 
         case 'append':
             return {
                 content: [{ type: 'text', text: `✓ Appended to session note:\n\n${result.note}` }],
             };
+
+        case 'history':
+        case 'search': {
+            const entries = result.history ?? [];
+            if (entries.length === 0) {
+                const msg = result.action === 'search'
+                    ? `No notes found matching "${args.search}".`
+                    : 'No note history yet.';
+                return { content: [{ type: 'text', text: msg }] };
+            }
+
+            const header = result.action === 'search'
+                ? `🔍 Found ${entries.length} note(s) matching "${args.search}" (${result.historyCount} total in history):`
+                : `📋 Note history (${entries.length} of ${result.historyCount} total, newest first):`;
+
+            const lines = entries.map(e => {
+                const date = new Date(e.created_at).toISOString().replace('T', ' ').slice(0, 19);
+                // Show first 200 chars of each note, with separator
+                const preview = e.note.length > 200 ? e.note.slice(0, 200) + '...' : e.note;
+                return `--- ${date} ---\n${preview}`;
+            });
+
+            return {
+                content: [{ type: 'text', text: `${header}\n\n${lines.join('\n\n')}` }],
+            };
+        }
 
         case 'read':
         default:
