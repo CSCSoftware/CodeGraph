@@ -19,6 +19,11 @@ docs/posts/
 docs/*.gif
 docs/*.png
 
+# Secrets / Tokens
+.*token*
+.*_token
+futureWork.md
+
 # Scripts
 *.bat
 
