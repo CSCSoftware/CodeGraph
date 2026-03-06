@@ -103,7 +103,7 @@ export function readGitignore(projectPath: string): string[] {
     return content
         .split('\n')
         .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#'))  // Keine Kommentare/Leerzeilen
+        .filter(line => line && !line.startsWith('#') && !line.startsWith('!'))  // Skip comments, empty lines, and negation patterns
         .map(pattern => {
             // Glob-kompatibel machen
             if (pattern.endsWith('/')) {

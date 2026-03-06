@@ -2,6 +2,11 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Gitignore negation patterns**: `readGitignore()` now skips negation patterns (lines starting with `!`) which were incorrectly causing all files to be excluded from the index when passed to minimatch
+
 ## [1.9.0] - 2026-02-06
 
 ### Added
