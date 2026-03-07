@@ -222,6 +222,7 @@ aidex_global_refresh()                                                 # Stats u
 - Session-Cache (5-Min TTL) für schnelle wiederholte Queries
 - Bulk-Index: ≤500 Code-Dateien automatisch, >500 werden dem User gezeigt
 - Progress-UI: SSE-basiert auf Port 3334 mit Browser-Auto-Open
+- Auto-Deduplizierung: Parent-Projekte mit Sub-Projekten werden übersprungen
 
 ### Auto-Cleanup (v1.3.1)
 `aidex_init` entfernt automatisch Dateien die jetzt excluded sind (z.B. build/).

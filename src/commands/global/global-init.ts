@@ -139,6 +139,13 @@ export async function globalInit(params: GlobalInitParams): Promise<GlobalInitRe
     const globalDb = openGlobalDatabase();
 
     try {
+        // --------------------------------------------------------
+        // Deduplicate: Remove parent projects that contain sub-projects
+        // e.g., AudioGrabber/ contains AudioGrabber/AudioGrabber/ and AudioGrabber/AudioGrabber2/
+        // → keep only the sub-projects, skip the parent
+        // --------------------------------------------------------
+        const deduplicatedProjects = deduplicateProjects(scanResult.projects);
+
         // Get existing projects for comparison
         const existingProjects = new Map(
             globalDb.getProjects().map(p => [p.path.replace(/\\/g, '/'), p])
@@ -147,8 +154,8 @@ export async function globalInit(params: GlobalInitParams): Promise<GlobalInitRe
         let newCount = 0;
         let updatedCount = 0;
 
-        // Register each found project
-        for (const project of scanResult.projects) {
+        // Register each found project (deduplicated)
+        for (const project of deduplicatedProjects) {
             const normalizedPath = project.path.replace(/\\/g, '/');
             const stats = readProjectStats(project.path);
             if (!stats) continue;
@@ -185,9 +192,27 @@ export async function globalInit(params: GlobalInitParams): Promise<GlobalInitRe
             }
         }
 
-        // Collect paths of indexed projects for exclusion
+        // Remove parent-duplicate projects already in the global DB
+        // (from previous runs before deduplication was added)
+        const allRegistered = globalDb.getProjects();
+        const allPaths = allRegistered.map(p => ({
+            id: p.id,
+            path: p.path.replace(/\\/g, '/').replace(/\/+$/, '') + '/',
+        }));
+        for (const project of allPaths) {
+            const isParent = allPaths.some(other =>
+                other.id !== project.id &&
+                other.path.startsWith(project.path)
+            );
+            if (isParent) {
+                globalDb.unregisterProject(project.path.replace(/\/+$/, ''));
+                removedCount++;
+            }
+        }
+
+        // Collect paths of indexed projects for exclusion (use deduplicated list)
         const indexedPaths = new Set(
-            scanResult.projects.map(p => p.path.replace(/\\/g, '/'))
+            deduplicatedProjects.map(p => p.path.replace(/\\/g, '/'))
         );
 
         // Find projects without .aidex/ index
@@ -290,8 +315,8 @@ export async function globalInit(params: GlobalInitParams): Promise<GlobalInitRe
             success: true,
             searchPath,
             registered: params.indexUnindexed
-                ? scanResult.projects.length + (indexedResults?.filter(r => r.success).length ?? 0)
-                : scanResult.projects.length,
+                ? deduplicatedProjects.length + (indexedResults?.filter(r => r.success).length ?? 0)
+                : deduplicatedProjects.length,
             newProjects: newCount,
             updatedProjects: updatedCount,
             removedProjects: removedCount,
@@ -476,4 +501,37 @@ function findUnindexedProjects(searchPath: string, maxDepth: number, indexedPath
 
     walk(searchPath, 0);
     return projects;
+}
+
+/**
+ * Deduplicate projects: If project A is a parent directory of project B,
+ * keep only B (the more specific sub-project).
+ *
+ * Example: Given paths [AudioGrabber/, AudioGrabber/AudioGrabber/, AudioGrabber/AudioGrabber2/]
+ * → Remove AudioGrabber/ because it contains sub-projects.
+ * → Keep AudioGrabber/AudioGrabber/ and AudioGrabber/AudioGrabber2/.
+ */
+function deduplicateProjects<T extends { path: string; name: string }>(projects: T[]): T[] {
+    // Normalize all paths
+    const normalized = projects.map(p => ({
+        ...p,
+        _normPath: p.path.replace(/\\/g, '/').replace(/\/+$/, '') + '/',
+    }));
+
+    // Sort by path length descending (deepest first)
+    normalized.sort((a, b) => b._normPath.length - a._normPath.length);
+
+    // A project is a "parent" if any other project's path starts with it
+    const result: typeof projects = [];
+    for (const project of normalized) {
+        const isParent = normalized.some(other =>
+            other !== project &&
+            other._normPath.startsWith(project._normPath)
+        );
+        if (!isParent) {
+            result.push(project);
+        }
+    }
+
+    return result;
 }

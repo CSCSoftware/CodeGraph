@@ -350,6 +350,7 @@ aidex_global_signatures({ name: "Player", kind: "class" })             # Find cl
 - Results are cached in memory (5-minute TTL) for fast repeated queries
 - Projects are batched (8 at a time) to respect SQLite's attachment limit
 - Each project keeps its own `.aidex/index.db` as the single source of truth
+- **Auto-deduplication**: Parent projects that contain sub-projects are automatically skipped (e.g., `MyApp/` is removed when `MyApp/Frontend/` and `MyApp/Backend/` exist as separate indexed projects)
 
 ### Management
 

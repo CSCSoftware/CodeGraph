@@ -23,6 +23,10 @@ All notable changes to AiDex will be documented in this file.
   - Server-Sent Events (SSE) for real-time updates
   - Shows per-project status (indexing/done/error), progress bar, scrolling log
   - Dark theme, auto-closes after completion
+- **Project deduplication**: Parent projects that contain sub-projects are automatically removed
+  - e.g., `AudioGrabber/` is skipped when `AudioGrabber/AudioGrabber/` and `AudioGrabber/AudioGrabber2/` exist
+  - Existing duplicates in global DB are cleaned up on next `global_init` run
+  - Reduced test index from 215 to 167 projects (48 parent-duplicates removed)
 - **Extended excludes**: Better handling of embedded runtimes and external code
   - `init.ts`: Added `**/site-packages/**`, `**/Lib/**`, `**/fdk-aac/**` to DEFAULT_EXCLUDE
   - `global-init.ts`: Added Python venvs, embedded Python runtimes (Python310-313), `.cargo`, `packages`, `fdk-aac` to DEFAULT_EXCLUDED_DIRS
