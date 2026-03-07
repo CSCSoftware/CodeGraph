@@ -18,6 +18,74 @@ AiDex is an MCP server that gives AI coding assistants instant access to your en
 
 </details>
 
+### What's Inside — 27 Tools in One Server
+
+| Category | Tools | What it does |
+|----------|-------|--------------|
+| **Search & Index** | `init`, `query`, `update`, `remove`, `status` | Index your project, search identifiers by name (exact/contains/starts_with), time-based filtering |
+| **Signatures** | `signature`, `signatures` | Get classes + methods of any file without reading it — single file or glob pattern |
+| **Project Overview** | `summary`, `tree`, `describe`, `files` | Entry points, language breakdown, file tree with stats, file listing by type |
+| **Cross-Project** | `link`, `unlink`, `links`, `scan` | Link dependencies, discover indexed projects |
+| **Global Search** | `global_init`, `global_query`, `global_signatures`, `global_status`, `global_refresh` | Search across ALL your projects at once — "Have I ever written X?" |
+| **Sessions** | `session`, `note` | Track sessions, detect external changes, leave notes for next session (with searchable history) |
+| **Task Backlog** | `task`, `tasks` | Built-in task management with priorities, tags, and auto-logged history |
+| **Screenshots** | `screenshot`, `windows` | Cross-platform screen capture (fullscreen, window, region) — no index needed |
+| **Viewer** | `viewer` | Interactive browser UI with file tree, signatures, tasks, and live reload |
+
+**11 languages** — C#, TypeScript, JavaScript, Rust, Python, C, C++, Java, Go, PHP, Ruby
+
+<details>
+<summary><strong>Quick Examples</strong> — see it in action</summary>
+
+```
+# Find where "PlayerHealth" is defined — 1 call, ~50 tokens
+aidex_query({ term: "PlayerHealth" })
+→ Engine.cs:45, Player.cs:23, UI.cs:156
+
+# All methods in a file — without reading the whole file
+aidex_signature({ file: "src/Engine.cs" })
+→ class GameEngine { Update(), Render(), LoadScene(), ... }
+
+# What changed in the last 2 hours?
+aidex_query({ term: "render", modified_since: "2h" })
+
+# Search across ALL your projects at once
+aidex_global_query({ term: "TransparentWindow", mode: "contains" })
+→ Found in: LibWebAppGpu (3 hits), DebugViewer (1 hit)
+
+# Leave a note for your next session
+aidex_note({ path: ".", note: "Test the parser fix after restart" })
+
+# Create a task while working
+aidex_task({ path: ".", action: "create", title: "Fix edge case in parser", priority: 1, tags: "bug" })
+```
+
+</details>
+
+## Table of Contents
+
+- [What's Inside](#whats-inside--27-tools-in-one-server)
+- [The Problem](#the-problem)
+- [The Solution](#the-solution)
+- [Why Not Just Grep?](#why-not-just-grep)
+- [How It Works](#how-it-works)
+- [Features](#features)
+- [Supported Languages](#supported-languages)
+- [Quick Start](#quick-start)
+- [Available Tools](#available-tools)
+- [Time-based Filtering](#time-based-filtering)
+- [Project Structure](#project-structure)
+- [Session Notes](#session-notes)
+- [Task Backlog](#task-backlog)
+- [Global Search](#global-search)
+- [Screenshots](#screenshots)
+- [Interactive Viewer](#interactive-viewer)
+- [CLI Usage](#cli-usage)
+- [Performance](#performance)
+- [Technology](#technology)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## The Problem
 
 Every time your AI assistant searches for code, it:
@@ -85,18 +153,13 @@ The index lives in `.aidex/index.db` (SQLite) - fast, portable, no external depe
 
 ## Features
 
-- **Screenshots**: Cross-platform screenshot capture (fullscreen, window, region) with auto-path for instant AI viewing
-- **Smart Extraction**: Uses Tree-sitter to parse code properly - indexes identifiers, not keywords
-- **Method Signatures**: Get function prototypes without reading implementations
-- **Project Summary**: Auto-detected entry points, main classes, language breakdown
-- **Incremental Updates**: Re-index single files after changes
-- **Cross-Project Links**: Query across multiple related projects
-- **Global Search**: Search across ALL indexed projects at once - "Have I ever written X?"
+- **Tree-sitter Parsing**: Real code parsing, not regex — indexes identifiers, ignores keywords and noise
+- **~50 Tokens per Search**: vs 2000+ with grep — your AI keeps its context for actual work
+- **Persistent Index**: Survives between sessions — no re-scanning, no re-reading
+- **Incremental Updates**: Re-index single files after changes, not the whole project
 - **Time-based Filtering**: Find what changed in the last hour, day, or week
-- **Project Structure**: Query all files (code, config, docs, assets) without filesystem access
-- **Session Notes**: Leave reminders for the next session - persists in the database, with searchable history
-- **Task Backlog**: Built-in task management that lives with your code index - no external tools needed
 - **Auto-Cleanup**: Excluded files (e.g., build outputs) are automatically removed from index
+- **Zero Dependencies**: SQLite with WAL mode — single file, fast, portable
 
 ## Supported Languages
 
@@ -116,14 +179,15 @@ The index lives in `.aidex/index.db` (SQLite) - fast, portable, no external depe
 
 ## Quick Start
 
-### 1. Install & Register
+### 1. Install
 
 ```bash
 npm install -g aidex-mcp
-aidex setup
 ```
 
-`aidex setup` automatically detects and registers AiDex with your installed AI clients (Claude Code, Claude Desktop, Cursor, Windsurf, Gemini CLI, VS Code Copilot). To unregister: `aidex unsetup`.
+**That's it.** Setup runs automatically after install — it detects your installed AI clients (Claude Code, Claude Desktop, Cursor, Windsurf, Gemini CLI, VS Code Copilot) and registers AiDex as an MCP server. It also adds usage instructions to your AI's config (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`).
+
+To re-run setup manually: `aidex setup` | To unregister: `aidex unsetup` | To skip auto-setup: `AIDEX_NO_SETUP=1 npm install -g aidex-mcp`
 
 ### 2. Or register manually with your AI assistant
 
@@ -182,20 +246,117 @@ aidex setup
 
 ### 3. Make your AI actually use it
 
-Add to your AI's instructions (e.g., `~/.claude/CLAUDE.md` for Claude Code):
+Add to your AI's instructions (e.g., `~/.claude/CLAUDE.md` for Claude Code, or the equivalent for your AI client). This tells the AI **when and how** to use AiDex instead of grepping:
 
 ```markdown
-## AiDex - Use for ALL code searches!
+## AiDex - Persistent Code Index (MCP Server)
 
-**Before using Grep/Glob, check if `.aidex/` exists in the project.**
+AiDex provides fast, precise code search through a pre-built index.
+**Always prefer AiDex over Grep/Glob for code searches.**
 
-If yes, use AiDex instead:
-- `aidex_query` - Find functions, classes, variables by name
-- `aidex_signature` - Get all methods in a file with line numbers
-- `aidex_signatures` - Get methods from multiple files (glob pattern)
-- `aidex_summary` - Project overview with entry points
+### REQUIRED: Before using Grep/Glob/Read for code searches
 
-If no `.aidex/` exists, offer to run `aidex_init` first.
+```
+Do I want to search code?
+├── .aidex/ exists    → STOP! Use AiDex instead
+├── .aidex/ missing   → run aidex_init (don't ask), THEN use AiDex
+└── Config/Logs/Text  → Grep/Read is fine
+```
+
+**NEVER do this when .aidex/ exists:**
+- ❌ `Grep pattern="functionName"` → ✅ `aidex_query term="functionName"`
+- ❌ `Grep pattern="class.*Name"` → ✅ `aidex_query term="Name" mode="contains"`
+- ❌ `Read file.cs` to see methods → ✅ `aidex_signature file="file.cs"`
+- ❌ `Glob pattern="**/*.cs"` + Read → ✅ `aidex_signatures pattern="**/*.cs"`
+
+### Session-Start Rule (REQUIRED — every session, no exceptions)
+
+1. Call `aidex_session({ path: "<project>" })` — detects external changes, auto-reindexes
+2. If `.aidex/` does NOT exist → run `aidex_init` automatically (don't ask)
+3. If a session note exists → **show it to the user** before continuing
+4. **Before ending a session:** always leave a note about what to do next
+
+### Question → Right Tool
+
+| Question | Tool |
+|----------|------|
+| "Where is X defined?" | `aidex_query term="X"` |
+| "Find anything containing X" | `aidex_query term="X" mode="contains"` |
+| "All functions starting with X" | `aidex_query term="X" mode="starts_with"` |
+| "What methods does file Y have?" | `aidex_signature file="Y"` |
+| "Explore all files in src/" | `aidex_signatures pattern="src/**"` |
+| "Project overview" | `aidex_summary` + `aidex_tree` |
+| "What changed recently?" | `aidex_query term="X" modified_since="2h"` |
+| "What files changed today?" | `aidex_files path="." modified_since="8h"` |
+| "Have I ever written X?" | `aidex_global_query term="X" mode="contains"` |
+| "Which project has class Y?" | `aidex_global_signatures term="Y" kind="class"` |
+| "All indexed projects?" | `aidex_global_status` |
+
+### Search Modes
+
+- **`exact`** (default): Finds only the exact identifier — `log` won't match `catalog`
+- **`contains`**: Finds identifiers containing the term — `render` matches `preRenderSetup`
+- **`starts_with`**: Finds identifiers starting with the term — `Update` matches `UpdatePlayer`, `UpdateUI`
+
+### All Tools (27)
+
+| Category | Tools | Purpose |
+|----------|-------|---------|
+| Search & Index | `aidex_init`, `aidex_query`, `aidex_update`, `aidex_remove`, `aidex_status` | Index project, search identifiers (exact/contains/starts_with), time filter |
+| Signatures | `aidex_signature`, `aidex_signatures` | Get classes + methods without reading files |
+| Overview | `aidex_summary`, `aidex_tree`, `aidex_describe`, `aidex_files` | Entry points, file tree, file listing by type |
+| Cross-Project | `aidex_link`, `aidex_unlink`, `aidex_links`, `aidex_scan` | Link dependencies, discover projects |
+| Global Search | `aidex_global_init`, `aidex_global_query`, `aidex_global_signatures`, `aidex_global_status`, `aidex_global_refresh` | Search across ALL projects |
+| Sessions | `aidex_session`, `aidex_note` | Track sessions, leave notes (with searchable history) |
+| Tasks | `aidex_task`, `aidex_tasks` | Built-in backlog with priorities, tags, auto-logged history |
+| Screenshots | `aidex_screenshot`, `aidex_windows` | Cross-platform screen capture (no index needed) |
+| Viewer | `aidex_viewer` | Interactive browser UI with file tree, signatures, tasks |
+
+**11 languages:** C#, TypeScript, JavaScript, Rust, Python, C, C++, Java, Go, PHP, Ruby
+
+### Session Notes
+
+Leave notes for the next session — they persist in the database:
+```
+aidex_note({ path: ".", note: "Test the fix after restart" })        # Write
+aidex_note({ path: ".", note: "Also check edge cases", append: true }) # Append
+aidex_note({ path: "." })                                              # Read
+aidex_note({ path: ".", search: "parser" })                            # Search history
+aidex_note({ path: ".", clear: true })                                 # Clear
+```
+- **Before ending a session:** automatically leave a note about next steps
+- **User says "remember for next session: ..."** → write it immediately
+
+### Task Backlog
+
+Track TODOs, bugs, and features right next to your code index:
+```
+aidex_task({ path: ".", action: "create", title: "Fix bug", priority: 1, tags: "bug" })
+aidex_task({ path: ".", action: "update", id: 1, status: "done" })
+aidex_task({ path: ".", action: "log", id: 1, note: "Root cause found" })
+aidex_tasks({ path: ".", status: "active" })
+```
+Priority: 1=high, 2=medium, 3=low | Status: `backlog → active → done | cancelled`
+
+### Global Search (across all projects)
+
+```
+aidex_global_init({ path: "/path/to/all/repos" })                     # Scan & register
+aidex_global_init({ path: "...", index_unindexed: true })              # + auto-index small projects
+aidex_global_query({ term: "TransparentWindow", mode: "contains" })   # Search everywhere
+aidex_global_signatures({ term: "Render", kind: "method" })           # Find methods everywhere
+aidex_global_status({ sort: "recent" })                                # List all projects
+```
+
+### Screenshots
+
+```
+aidex_screenshot()                                             # Full screen
+aidex_screenshot({ mode: "active_window" })                    # Active window
+aidex_screenshot({ mode: "window", window_title: "VS Code" }) # Specific window
+aidex_windows({ filter: "chrome" })                            # Find window titles
+```
+No index needed. Returns file path → use `Read` to view immediately.
 ```
 
 ### 4. Index your project

@@ -62,46 +62,110 @@ const CLAUDE_MD_END = '<!-- AIDEX-END -->';
 const CLAUDE_MD_BLOCK = `${CLAUDE_MD_START}
 ## AiDex - Persistent Code Index (MCP Server)
 
-AiDex provides fast, precise code search through a pre-built index. **Always prefer AiDex over Grep/Glob for code searches.**
+AiDex provides fast, precise code search through a pre-built index.
+**Always prefer AiDex over Grep/Glob for code searches.**
 
-### Auto-Init Rule
+### REQUIRED: Before using Grep/Glob/Read for code searches
 
-**At the start of every session, check if \`.aidex/\` exists in the project directory.**
-- If \`.aidex/\` does NOT exist → **automatically run \`aidex_init\`** to create the index. Do not ask, just do it.
-- If \`.aidex/\` exists → use AiDex tools for all code searches.
+\`\`\`
+Do I want to search code?
+├── .aidex/ exists    → STOP! Use AiDex instead
+├── .aidex/ missing   → run aidex_init (don't ask), THEN use AiDex
+└── Config/Logs/Text  → Grep/Read is fine
+\`\`\`
 
-### When to Use AiDex (instead of Grep/Glob)
+**NEVER do this when .aidex/ exists:**
+- ❌ \`Grep pattern="functionName"\` → ✅ \`aidex_query term="functionName"\`
+- ❌ \`Grep pattern="class.*Name"\` → ✅ \`aidex_query term="Name" mode="contains"\`
+- ❌ \`Read file.cs\` to see methods → ✅ \`aidex_signature file="file.cs"\`
+- ❌ \`Glob pattern="**/*.cs"\` + Read → ✅ \`aidex_signatures pattern="**/*.cs"\`
 
-| Task | Do NOT use | Use instead |
-|------|-----------|-------------|
-| Find a function/class/variable | \`Grep pattern="name"\` | \`aidex_query term="name"\` |
-| See all methods in a file | \`Read entire_file.cs\` | \`aidex_signature file="..."\` |
-| Explore multiple files | Multiple Read calls | \`aidex_signatures pattern="src/**"\` |
-| Project overview | Many Glob/Read calls | \`aidex_summary\` + \`aidex_tree\` |
-| What changed recently? | \`git log\` + Read | \`aidex_query term="X" modified_since="2h"\` |
+### Session-Start Rule (REQUIRED — every session, no exceptions)
 
-### Available Tools
+1. Call \`aidex_session({ path: "<project>" })\` — detects external changes, auto-reindexes
+2. If \`.aidex/\` does NOT exist → run \`aidex_init\` automatically (don't ask)
+3. If a session note exists → **show it to the user** before continuing
+4. **Before ending a session:** always leave a note about what to do next
 
-| Tool | Purpose |
-|------|---------|
-| \`aidex_init\` | Index a project (creates \`.aidex/\`) |
-| \`aidex_query\` | Search by term (exact/contains/starts_with) |
-| \`aidex_signature\` | Get one file's classes + methods |
-| \`aidex_signatures\` | Get signatures for multiple files (glob) |
-| \`aidex_update\` | Re-index a single changed file |
-| \`aidex_summary\` | Project overview with entry points |
-| \`aidex_tree\` | File tree with statistics |
-| \`aidex_files\` | List project files by type |
-| \`aidex_session\` | Start session, detect external changes |
-| \`aidex_note\` | Read/write session notes |
-| \`aidex_viewer\` | Open interactive project tree in browser |
+### Question → Right Tool
 
-### Why AiDex over Grep?
+| Question | Tool |
+|----------|------|
+| "Where is X defined?" | \`aidex_query term="X"\` |
+| "Find anything containing X" | \`aidex_query term="X" mode="contains"\` |
+| "All functions starting with X" | \`aidex_query term="X" mode="starts_with"\` |
+| "What methods does file Y have?" | \`aidex_signature file="Y"\` |
+| "Explore all files in src/" | \`aidex_signatures pattern="src/**"\` |
+| "Project overview" | \`aidex_summary\` + \`aidex_tree\` |
+| "What changed recently?" | \`aidex_query term="X" modified_since="2h"\` |
+| "What files changed today?" | \`aidex_files path="." modified_since="8h"\` |
+| "Have I ever written X?" | \`aidex_global_query term="X" mode="contains"\` |
+| "Which project has class Y?" | \`aidex_global_signatures term="Y" kind="class"\` |
+| "All indexed projects?" | \`aidex_global_status\` |
 
-- **~50 tokens** per search vs 2000+ with Grep
-- **Identifiers only** - no noise from comments/strings
-- **Persistent** - index survives between sessions
-- **Structure-aware** - knows methods, classes, types
+### Search Modes
+
+- **\`exact\`** (default): Finds only the exact identifier — \`log\` won't match \`catalog\`
+- **\`contains\`**: Finds identifiers containing the term — \`render\` matches \`preRenderSetup\`
+- **\`starts_with\`**: Finds identifiers starting with the term — \`Update\` matches \`UpdatePlayer\`, \`UpdateUI\`
+
+### All Tools (27)
+
+| Category | Tools | Purpose |
+|----------|-------|---------|
+| Search & Index | \`aidex_init\`, \`aidex_query\`, \`aidex_update\`, \`aidex_remove\`, \`aidex_status\` | Index project, search identifiers (exact/contains/starts_with), time filter |
+| Signatures | \`aidex_signature\`, \`aidex_signatures\` | Get classes + methods without reading files |
+| Overview | \`aidex_summary\`, \`aidex_tree\`, \`aidex_describe\`, \`aidex_files\` | Entry points, file tree, file listing by type |
+| Cross-Project | \`aidex_link\`, \`aidex_unlink\`, \`aidex_links\`, \`aidex_scan\` | Link dependencies, discover projects |
+| Global Search | \`aidex_global_init\`, \`aidex_global_query\`, \`aidex_global_signatures\`, \`aidex_global_status\`, \`aidex_global_refresh\` | Search across ALL projects |
+| Sessions | \`aidex_session\`, \`aidex_note\` | Track sessions, leave notes (with searchable history) |
+| Tasks | \`aidex_task\`, \`aidex_tasks\` | Built-in backlog with priorities, tags, auto-logged history |
+| Screenshots | \`aidex_screenshot\`, \`aidex_windows\` | Cross-platform screen capture (no index needed) |
+| Viewer | \`aidex_viewer\` | Interactive browser UI with file tree, signatures, tasks |
+
+### Session Notes
+
+Leave notes for the next session — they persist in the database:
+\`\`\`
+aidex_note({ path: ".", note: "Test the fix after restart" })        # Write
+aidex_note({ path: ".", note: "Also check edge cases", append: true }) # Append
+aidex_note({ path: "." })                                              # Read
+aidex_note({ path: ".", search: "parser" })                            # Search history
+aidex_note({ path: ".", clear: true })                                 # Clear
+\`\`\`
+- **Before ending a session:** automatically leave a note about next steps
+- **User says "remember for next session: ..."** → write it immediately
+
+### Task Backlog
+
+Track TODOs, bugs, and features right next to your code index:
+\`\`\`
+aidex_task({ path: ".", action: "create", title: "Fix bug", priority: 1, tags: "bug" })
+aidex_task({ path: ".", action: "update", id: 1, status: "done" })
+aidex_task({ path: ".", action: "log", id: 1, note: "Root cause found" })
+aidex_tasks({ path: ".", status: "active" })
+\`\`\`
+Priority: 1=high, 2=medium, 3=low | Status: \`backlog → active → done | cancelled\`
+
+### Global Search (across all projects)
+
+\`\`\`
+aidex_global_init({ path: "/path/to/all/repos" })                     # Scan & register
+aidex_global_init({ path: "...", index_unindexed: true })              # + auto-index small projects
+aidex_global_query({ term: "TransparentWindow", mode: "contains" })   # Search everywhere
+aidex_global_signatures({ term: "Render", kind: "method" })           # Find methods everywhere
+aidex_global_status({ sort: "recent" })                                # List all projects
+\`\`\`
+
+### Screenshots
+
+\`\`\`
+aidex_screenshot()                                             # Full screen
+aidex_screenshot({ mode: "active_window" })                    # Active window
+aidex_screenshot({ mode: "window", window_title: "VS Code" }) # Specific window
+aidex_windows({ filter: "chrome" })                            # Find window titles
+\`\`\`
+No index needed. Returns file path → use \`Read\` to view immediately.
 ${CLAUDE_MD_END}`;
 
 // ============================================================
@@ -299,12 +363,17 @@ function installInstructionFile(file: InstructionFile): { success: boolean; acti
     if (existsSync(file.path)) {
         content = readFileSync(file.path, 'utf8');
 
-        // Already has AiDex block? Replace it
+        // Already has AiDex block with markers? Replace it
         if (content.includes(CLAUDE_MD_START)) {
             const regex = new RegExp(`${CLAUDE_MD_START}[\\s\\S]*?${CLAUDE_MD_END}`, 'g');
             content = content.replace(regex, CLAUDE_MD_BLOCK);
             writeFileSync(file.path, content, 'utf8');
             return { success: true, action: 'updated' };
+        }
+
+        // Already has manual AiDex instructions (without markers)? Skip to avoid duplicates
+        if (content.includes('aidex_query') || content.includes('aidex_init') || content.includes('aidex_session')) {
+            return { success: true, action: 'skipped (existing AiDex instructions found)' };
         }
 
         // Append to existing file

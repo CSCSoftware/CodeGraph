@@ -8,7 +8,8 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { INDEX_DIR } from '../../constants.js';
-import { openGlobalDatabase, readProjectStats, globalDbExists } from '../../db/global-database.js';
+import { readProjectStats } from '../../db/global-database.js';
+import { withGlobalDb, EMPTY_TOTALS } from './global-shared.js';
 
 // ============================================================
 // Types
@@ -39,75 +40,61 @@ export interface GlobalRefreshResult {
 // ============================================================
 
 export function globalRefresh(params: GlobalRefreshParams): GlobalRefreshResult {
-    if (!globalDbExists()) {
-        return {
+    return withGlobalDb<GlobalRefreshResult>(
+        (error) => ({
             success: false,
             updated: 0,
             removed: 0,
             removedPaths: [],
-            totals: { projects: 0, files: 0, items: 0, methods: 0, types: 0 },
-            error: 'No global index found. Run aidex_global_init first.',
-        };
-    }
-
-    const globalDb = openGlobalDatabase();
-
-    try {
-        let projects = globalDb.getProjects(
-            params.tagFilter ? { tag: params.tagFilter } : undefined
-        );
-
-        // Filter to specific project if requested
-        if (params.project) {
-            const normalizedFilter = params.project.replace(/\\/g, '/');
-            projects = projects.filter(p =>
-                p.name === params.project ||
-                p.path === normalizedFilter
+            totals: { ...EMPTY_TOTALS },
+            error,
+        }),
+        (globalDb) => {
+            let projects = globalDb.getProjects(
+                params.tagFilter ? { tag: params.tagFilter } : undefined
             );
-        }
 
-        let updated = 0;
-        let removed = 0;
-        const removedPaths: string[] = [];
-
-        for (const project of projects) {
-            const dbPath = join(project.path, INDEX_DIR, 'index.db');
-
-            if (!existsSync(dbPath)) {
-                // Project no longer exists — remove from registry
-                globalDb.unregisterProject(project.path);
-                removedPaths.push(project.path);
-                removed++;
-                continue;
+            // Filter to specific project if requested
+            if (params.project) {
+                const normalizedFilter = params.project.replace(/\\/g, '/');
+                projects = projects.filter(p =>
+                    p.name === params.project ||
+                    p.path === normalizedFilter
+                );
             }
 
-            // Read fresh stats and update
-            const stats = readProjectStats(project.path);
-            if (stats) {
-                globalDb.registerProject(project.path, project.name, stats);
-                updated++;
+            let updated = 0;
+            let removed = 0;
+            const removedPaths: string[] = [];
+
+            for (const project of projects) {
+                const dbPath = join(project.path, INDEX_DIR, 'index.db');
+
+                if (!existsSync(dbPath)) {
+                    // Project no longer exists — remove from registry
+                    globalDb.unregisterProject(project.path);
+                    removedPaths.push(project.path);
+                    removed++;
+                    continue;
+                }
+
+                // Read fresh stats and update
+                const stats = readProjectStats(project.path);
+                if (stats) {
+                    globalDb.registerProject(project.path, project.name, stats);
+                    updated++;
+                }
             }
+
+            const totals = globalDb.getTotals();
+
+            return {
+                success: true,
+                updated,
+                removed,
+                removedPaths,
+                totals,
+            };
         }
-
-        const totals = globalDb.getTotals();
-        globalDb.close();
-
-        return {
-            success: true,
-            updated,
-            removed,
-            removedPaths,
-            totals,
-        };
-    } catch (error) {
-        globalDb.close();
-        return {
-            success: false,
-            updated: 0,
-            removed: 0,
-            removedPaths: [],
-            totals: { projects: 0, files: 0, items: 0, methods: 0, types: 0 },
-            error: error instanceof Error ? error.message : String(error),
-        };
-    }
+    );
 }

@@ -10,10 +10,11 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { minimatch } from 'minimatch';
-import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
-import { openDatabase, createQueries } from '../db/index.js';
+import { createQueries } from '../db/index.js';
+import { openDatabase } from '../db/index.js';
 import { update } from './update.js';
 import { DEFAULT_EXCLUDE, readGitignore, shortHash } from './init.js';
+import { validateIndex, noIndexError, withProjectDb } from './shared.js';
 
 // ============================================================
 // Types
@@ -68,124 +69,112 @@ const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 export function session(params: SessionParams): SessionResult {
     const { path: projectPath } = params;
 
-    // Validate project path
-    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
+    return withProjectDb(
+        projectPath, false,
+        (error) => ({ success: false, isNewSession: false, sessionInfo: { lastSessionStart: null, lastSessionEnd: null, currentSessionStart: null }, externalChanges: [], reindexed: [], note: null, error }),
+        (db, queries) => {
+            try {
+                const now = Date.now();
 
-    if (!existsSync(dbPath)) {
-        return {
-            success: false,
-            isNewSession: false,
-            sessionInfo: { lastSessionStart: null, lastSessionEnd: null, currentSessionStart: null },
-            externalChanges: [],
-            reindexed: [],
-            note: null,
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
-        };
-    }
+                // Get current session info
+                const currentStart = db.getMetadata(KEY_CURRENT_SESSION_START);
+                const lastEnd = db.getMetadata(KEY_LAST_SESSION_END);
 
-    const db = openDatabase(dbPath, false);
-    const queries = createQueries(db);
-    const now = Date.now();
+                // Determine if this is a new session
+                const lastActivity = lastEnd ? parseInt(lastEnd, 10) : (currentStart ? parseInt(currentStart, 10) : 0);
+                const isNewSession = !currentStart || (now - lastActivity > SESSION_TIMEOUT_MS);
 
-    try {
-        // Get current session info
-        const currentStart = db.getMetadata(KEY_CURRENT_SESSION_START);
-        const lastEnd = db.getMetadata(KEY_LAST_SESSION_END);
+                let sessionInfo: SessionInfo;
+                let externalChanges: ChangedFile[] = [];
+                let reindexed: string[] = [];
 
-        // Determine if this is a new session
-        const lastActivity = lastEnd ? parseInt(lastEnd, 10) : (currentStart ? parseInt(currentStart, 10) : 0);
-        const isNewSession = !currentStart || (now - lastActivity > SESSION_TIMEOUT_MS);
-
-        let sessionInfo: SessionInfo;
-        let externalChanges: ChangedFile[] = [];
-        let reindexed: string[] = [];
-
-        if (isNewSession) {
-            // Archive previous session times
-            if (currentStart) {
-                db.setMetadata(KEY_LAST_SESSION_START, currentStart);
-            }
-            if (lastEnd) {
-                // Use the last recorded end time as last_session_end
-            } else if (currentStart) {
-                db.setMetadata(KEY_LAST_SESSION_END, currentStart);
-            }
-
-            // Start new session
-            db.setMetadata(KEY_CURRENT_SESSION_START, now.toString());
-
-            // Detect external changes
-            externalChanges = detectExternalChanges(projectPath, queries);
-
-            // Auto-reindex modified files
-            for (const change of externalChanges) {
-                if (change.reason === 'modified') {
-                    const result = update({ path: projectPath, file: change.path });
-                    if (result.success) {
-                        reindexed.push(change.path);
+                if (isNewSession) {
+                    // Archive previous session times
+                    if (currentStart) {
+                        db.setMetadata(KEY_LAST_SESSION_START, currentStart);
                     }
+                    if (lastEnd) {
+                        // Use the last recorded end time as last_session_end
+                    } else if (currentStart) {
+                        db.setMetadata(KEY_LAST_SESSION_END, currentStart);
+                    }
+
+                    // Start new session
+                    db.setMetadata(KEY_CURRENT_SESSION_START, now.toString());
+
+                    // Detect external changes
+                    externalChanges = detectExternalChanges(projectPath, queries);
+
+                    // Auto-reindex modified files
+                    for (const change of externalChanges) {
+                        if (change.reason === 'modified') {
+                            const result = update({ path: projectPath, file: change.path });
+                            if (result.success) {
+                                reindexed.push(change.path);
+                            }
+                        }
+                    }
+
+                    sessionInfo = {
+                        lastSessionStart: currentStart ? parseInt(currentStart, 10) : null,
+                        lastSessionEnd: lastEnd ? parseInt(lastEnd, 10) : null,
+                        currentSessionStart: now,
+                    };
+                } else {
+                    // Continue existing session
+                    const lastStart = db.getMetadata(KEY_LAST_SESSION_START);
+                    const lastEndVal = db.getMetadata(KEY_LAST_SESSION_END);
+                    sessionInfo = {
+                        lastSessionStart: lastStart ? parseInt(lastStart, 10) : null,
+                        lastSessionEnd: lastEndVal ? parseInt(lastEndVal, 10) : null,
+                        currentSessionStart: parseInt(currentStart!, 10),
+                    };
                 }
+
+                // Always update session end time (heartbeat)
+                db.setMetadata(KEY_LAST_SESSION_END, now.toString());
+
+                // Get session note
+                const note = db.getMetadata(KEY_SESSION_NOTE);
+
+                return {
+                    success: true,
+                    isNewSession,
+                    sessionInfo,
+                    externalChanges,
+                    reindexed,
+                    note,
+                };
+
+            } catch (error) {
+                return {
+                    success: false,
+                    isNewSession: false,
+                    sessionInfo: { lastSessionStart: null, lastSessionEnd: null, currentSessionStart: null },
+                    externalChanges: [],
+                    reindexed: [],
+                    note: null,
+                    error: error instanceof Error ? error.message : String(error),
+                };
             }
-
-            sessionInfo = {
-                lastSessionStart: currentStart ? parseInt(currentStart, 10) : null,
-                lastSessionEnd: lastEnd ? parseInt(lastEnd, 10) : null,
-                currentSessionStart: now,
-            };
-        } else {
-            // Continue existing session
-            sessionInfo = {
-                lastSessionStart: db.getMetadata(KEY_LAST_SESSION_START) ? parseInt(db.getMetadata(KEY_LAST_SESSION_START)!, 10) : null,
-                lastSessionEnd: db.getMetadata(KEY_LAST_SESSION_END) ? parseInt(db.getMetadata(KEY_LAST_SESSION_END)!, 10) : null,
-                currentSessionStart: parseInt(currentStart!, 10),
-            };
         }
-
-        // Always update session end time (heartbeat)
-        db.setMetadata(KEY_LAST_SESSION_END, now.toString());
-
-        // Get session note
-        const note = db.getMetadata(KEY_SESSION_NOTE);
-
-        db.close();
-
-        return {
-            success: true,
-            isNewSession,
-            sessionInfo,
-            externalChanges,
-            reindexed,
-            note,
-        };
-
-    } catch (error) {
-        db.close();
-        return {
-            success: false,
-            isNewSession: false,
-            sessionInfo: { lastSessionStart: null, lastSessionEnd: null, currentSessionStart: null },
-            externalChanges: [],
-            reindexed: [],
-            note: null,
-            error: error instanceof Error ? error.message : String(error),
-        };
-    }
+    );
 }
 
 /**
  * Update session heartbeat (call periodically during session)
  */
 export function updateSessionHeartbeat(projectPath: string): void {
-    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
-
-    if (!existsSync(dbPath)) {
-        return;
-    }
+    const dbPath = validateIndex(projectPath);
+    if (!dbPath) return;
 
     try {
         const db = openDatabase(dbPath, false);
-        db.setMetadata(KEY_LAST_SESSION_END, Date.now().toString());
-        db.close();
+        try {
+            db.setMetadata(KEY_LAST_SESSION_END, Date.now().toString());
+        } finally {
+            db.close();
+        }
     } catch {
         // Silently ignore errors
     }
@@ -195,21 +184,23 @@ export function updateSessionHeartbeat(projectPath: string): void {
  * Get session info without starting/updating
  */
 export function getSessionInfo(projectPath: string): SessionInfo | null {
-    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
-
-    if (!existsSync(dbPath)) {
-        return null;
-    }
+    const dbPath = validateIndex(projectPath);
+    if (!dbPath) return null;
 
     try {
         const db = openDatabase(dbPath, true);
-        const info: SessionInfo = {
-            lastSessionStart: db.getMetadata(KEY_LAST_SESSION_START) ? parseInt(db.getMetadata(KEY_LAST_SESSION_START)!, 10) : null,
-            lastSessionEnd: db.getMetadata(KEY_LAST_SESSION_END) ? parseInt(db.getMetadata(KEY_LAST_SESSION_END)!, 10) : null,
-            currentSessionStart: db.getMetadata(KEY_CURRENT_SESSION_START) ? parseInt(db.getMetadata(KEY_CURRENT_SESSION_START)!, 10) : null,
-        };
-        db.close();
-        return info;
+        try {
+            const lastStart = db.getMetadata(KEY_LAST_SESSION_START);
+            const lastEnd = db.getMetadata(KEY_LAST_SESSION_END);
+            const currStart = db.getMetadata(KEY_CURRENT_SESSION_START);
+            return {
+                lastSessionStart: lastStart ? parseInt(lastStart, 10) : null,
+                lastSessionEnd: lastEnd ? parseInt(lastEnd, 10) : null,
+                currentSessionStart: currStart ? parseInt(currStart, 10) : null,
+            };
+        } finally {
+            db.close();
+        }
     } catch {
         return null;
     }

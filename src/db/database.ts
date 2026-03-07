@@ -17,6 +17,7 @@ export interface DatabaseConfig {
 export class AiDexDatabase {
     private db: Database.Database;
     private dbPath: string;
+    private _statsStmt?: Database.Statement;
 
     constructor(config: DatabaseConfig) {
         this.dbPath = config.dbPath;
@@ -143,15 +144,17 @@ export class AiDexDatabase {
         dependencies: number;
         sizeBytes: number;
     } {
-        const counts = {
-            files: (this.db.prepare('SELECT COUNT(*) as c FROM files').get() as { c: number }).c,
-            lines: (this.db.prepare('SELECT COUNT(*) as c FROM lines').get() as { c: number }).c,
-            items: (this.db.prepare('SELECT COUNT(*) as c FROM items').get() as { c: number }).c,
-            occurrences: (this.db.prepare('SELECT COUNT(*) as c FROM occurrences').get() as { c: number }).c,
-            methods: (this.db.prepare('SELECT COUNT(*) as c FROM methods').get() as { c: number }).c,
-            types: (this.db.prepare('SELECT COUNT(*) as c FROM types').get() as { c: number }).c,
-            dependencies: (this.db.prepare('SELECT COUNT(*) as c FROM dependencies').get() as { c: number }).c,
-        };
+        this._statsStmt ??= this.db.prepare(`
+            SELECT
+                (SELECT COUNT(*) FROM files) as files,
+                (SELECT COUNT(*) FROM lines) as lines,
+                (SELECT COUNT(*) FROM items) as items,
+                (SELECT COUNT(*) FROM occurrences) as occurrences,
+                (SELECT COUNT(*) FROM methods) as methods,
+                (SELECT COUNT(*) FROM types) as types,
+                (SELECT COUNT(*) FROM dependencies) as dependencies
+        `);
+        const counts = this._statsStmt.get() as { files: number; lines: number; items: number; occurrences: number; methods: number; types: number; dependencies: number };
 
         // Get file size
         const pragmaResult = this.db.pragma('page_count') as Array<{ page_count: number }>;

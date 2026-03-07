@@ -6,6 +6,7 @@ import { existsSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
 import { INDEX_DIR } from '../constants.js';
 import { openDatabase } from '../db/index.js';
+import { validateIndex } from './shared.js';
 
 // ============================================================
 // Types
@@ -86,10 +87,9 @@ export function scan(params: ScanParams): ScanResult {
         scannedDirs++;
 
         // Check if this directory has an index dir
-        const indexPath = join(dirPath, INDEX_DIR);
-        const dbPath = join(indexPath, 'index.db');
+        const dbPath = validateIndex(dirPath);
 
-        if (existsSync(dbPath)) {
+        if (dbPath) {
             try {
                 const db = openDatabase(dbPath, true);
                 const stats = db.getStats();

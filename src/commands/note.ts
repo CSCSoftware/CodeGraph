@@ -11,10 +11,8 @@
  * v1.10.0 - Note history: archived notes are searchable
  */
 
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 import { openDatabase } from '../db/index.js';
+import { validateIndex, noIndexError } from './shared.js';
 
 // ============================================================
 // Types
@@ -59,20 +57,20 @@ export function note(params: NoteParams): NoteResult {
     const { path: projectPath, note: newNote, append, clear, history, search, limit } = params;
 
     // Validate project path
-    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
-
-    if (!existsSync(dbPath)) {
+    const dbPath = validateIndex(projectPath);
+    if (!dbPath) {
         return {
             success: false,
             note: null,
             action: 'read',
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
+            error: noIndexError(projectPath),
         };
     }
 
     // History and search need write access too (for auto-migration)
     const isWriteOperation = newNote !== undefined || clear;
     const needsReadWrite = isWriteOperation || history || search !== undefined;
+
     const db = openDatabase(dbPath, !needsReadWrite);
 
     try {
@@ -92,7 +90,6 @@ export function note(params: NoteParams): NoteResult {
         if (search !== undefined) {
             const results = db.searchNoteHistory(search, limit ?? 20);
             const totalCount = db.countNoteHistory();
-            db.close();
             return {
                 success: true,
                 note: null,
@@ -106,7 +103,6 @@ export function note(params: NoteParams): NoteResult {
         if (history) {
             const results = db.getNoteHistory(limit ?? 20);
             const totalCount = db.countNoteHistory();
-            db.close();
             return {
                 success: true,
                 note: null,
@@ -124,7 +120,6 @@ export function note(params: NoteParams): NoteResult {
                 db.archiveNote(existing);
             }
             db.deleteMetadata(NOTE_KEY);
-            db.close();
             return {
                 success: true,
                 note: null,
@@ -150,7 +145,6 @@ export function note(params: NoteParams): NoteResult {
             }
 
             db.setMetadata(NOTE_KEY, finalNote);
-            db.close();
 
             return {
                 success: true,
@@ -161,7 +155,6 @@ export function note(params: NoteParams): NoteResult {
 
         // --- Read ---
         const currentNote = db.getMetadata(NOTE_KEY);
-        db.close();
 
         return {
             success: true,
@@ -170,13 +163,14 @@ export function note(params: NoteParams): NoteResult {
         };
 
     } catch (error) {
-        db.close();
         return {
             success: false,
             note: null,
             action: 'read',
             error: error instanceof Error ? error.message : String(error),
         };
+    } finally {
+        db.close();
     }
 }
 
@@ -184,17 +178,18 @@ export function note(params: NoteParams): NoteResult {
  * Get note for a project (used internally by other tools to include in output)
  */
 export function getSessionNote(projectPath: string): string | null {
-    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
-
-    if (!existsSync(dbPath)) {
+    const dbPath = validateIndex(projectPath);
+    if (!dbPath) {
         return null;
     }
 
     try {
         const db = openDatabase(dbPath, true);
-        const currentNote = db.getMetadata(NOTE_KEY);
-        db.close();
-        return currentNote;
+        try {
+            return db.getMetadata(NOTE_KEY);
+        } finally {
+            db.close();
+        }
     } catch {
         return null;
     }

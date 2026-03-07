@@ -7,7 +7,7 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { INDEX_DIR } from '../../constants.js';
-import { openGlobalDatabase, globalDbExists, type GlobalProject } from '../../db/global-database.js';
+import { withGlobalDb, EMPTY_TOTALS } from './global-shared.js';
 
 // ============================================================
 // Types
@@ -49,69 +49,54 @@ export interface GlobalStatusResult {
 // ============================================================
 
 export function globalStatus(params: GlobalStatusParams): GlobalStatusResult {
-    if (!globalDbExists()) {
-        return {
+    return withGlobalDb<GlobalStatusResult>(
+        (error) => ({
             success: false,
             projects: [],
-            totals: { projects: 0, files: 0, items: 0, methods: 0, types: 0 },
+            totals: { ...EMPTY_TOTALS },
             globalDbPath: '',
-            error: 'No global index found. Run aidex_global_init first.',
-        };
-    }
+            error,
+        }),
+        (globalDb) => {
+            const filter = params.tagFilter ? { tag: params.tagFilter } : undefined;
+            const projects = globalDb.getProjects(filter);
 
-    const globalDb = openGlobalDatabase();
+            // Map to output format and check availability
+            const statusProjects: GlobalStatusProject[] = projects.map(p => ({
+                name: p.name,
+                path: p.path,
+                files: p.files_count,
+                methods: p.methods_count,
+                types: p.types_count,
+                languages: p.languages,
+                lastIndexed: p.last_indexed,
+                tags: p.tags,
+                available: existsSync(join(p.path, INDEX_DIR, 'index.db')),
+            }));
 
-    try {
-        const filter = params.tagFilter ? { tag: params.tagFilter } : undefined;
-        const projects = globalDb.getProjects(filter);
+            // Sort
+            const sort = params.sort ?? 'name';
+            switch (sort) {
+                case 'size':
+                    statusProjects.sort((a, b) => b.files - a.files);
+                    break;
+                case 'recent':
+                    statusProjects.sort((a, b) => (b.lastIndexed ?? 0) - (a.lastIndexed ?? 0));
+                    break;
+                case 'name':
+                default:
+                    statusProjects.sort((a, b) => a.name.localeCompare(b.name));
+                    break;
+            }
 
-        // Map to output format and check availability
-        const statusProjects: GlobalStatusProject[] = projects.map(p => ({
-            name: p.name,
-            path: p.path,
-            files: p.files_count,
-            methods: p.methods_count,
-            types: p.types_count,
-            languages: p.languages,
-            lastIndexed: p.last_indexed,
-            tags: p.tags,
-            available: existsSync(join(p.path, INDEX_DIR, 'index.db')),
-        }));
+            const totals = globalDb.getTotals();
 
-        // Sort
-        const sort = params.sort ?? 'name';
-        switch (sort) {
-            case 'size':
-                statusProjects.sort((a, b) => b.files - a.files);
-                break;
-            case 'recent':
-                statusProjects.sort((a, b) => (b.lastIndexed ?? 0) - (a.lastIndexed ?? 0));
-                break;
-            case 'name':
-            default:
-                statusProjects.sort((a, b) => a.name.localeCompare(b.name));
-                break;
+            return {
+                success: true,
+                projects: statusProjects,
+                totals,
+                globalDbPath: globalDb.getPath(),
+            };
         }
-
-        const totals = globalDb.getTotals();
-        const dbPath = globalDb.getPath();
-
-        globalDb.close();
-
-        return {
-            success: true,
-            projects: statusProjects,
-            totals,
-            globalDbPath: dbPath,
-        };
-    } catch (error) {
-        globalDb.close();
-        return {
-            success: false,
-            projects: [],
-            totals: { projects: 0, files: 0, items: 0, methods: 0, types: 0 },
-            globalDbPath: globalDb.getPath(),
-            error: error instanceof Error ? error.message : String(error),
-        };
-    }
+    );
 }

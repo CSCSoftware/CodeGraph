@@ -6,13 +6,10 @@
  * Completed tasks are preserved as documentation.
  */
 
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
-import { openDatabase, createQueries } from '../db/index.js';
 import type { AiDexDatabase } from '../db/index.js';
 import type { TaskRow, TaskLogRow } from '../db/index.js';
 import { broadcastTaskUpdate } from '../viewer/server.js';
+import { validateIndex, noIndexError, withDatabase } from './shared.js';
 
 // ============================================================
 // Types
@@ -114,8 +111,8 @@ function ensureTaskTables(db: AiDexDatabase): void {
     sqlite.exec(TASKS_MIGRATION);
 
     // Check if existing table needs migration (missing 'cancelled' in CHECK)
-    const tableInfo = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'").get() as { sql: string } | undefined;
-    if (tableInfo && !tableInfo.sql.includes('cancelled')) {
+    const tableInfo = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'").get() as { sql: string | null } | undefined;
+    if (tableInfo?.sql && !tableInfo.sql.includes('cancelled')) {
         sqlite.exec(TASKS_MIGRATE_CANCELLED);
     }
 }
@@ -127,118 +124,118 @@ function ensureTaskTables(db: AiDexDatabase): void {
 export function task(params: TaskParams): TaskResult {
     const { path: projectPath, action } = params;
 
-    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
-    if (!existsSync(dbPath)) {
+    const dbPath = validateIndex(projectPath);
+    if (!dbPath) {
         return {
             success: false,
             action,
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
+            error: noIndexError(projectPath),
         };
     }
 
-    const db = openDatabase(dbPath, false);
-
     try {
-        ensureTaskTables(db);
-        const queries = createQueries(db);
+        return withDatabase(dbPath, false, (db, queries) => {
+            try {
+                ensureTaskTables(db);
 
-        switch (action) {
-            case 'create': {
-                if (!params.title) {
-                    return { success: false, action, error: 'title is required for create' };
+                switch (action) {
+                    case 'create': {
+                        if (!params.title) {
+                            return { success: false, action, error: 'title is required for create' };
+                        }
+                        const id = queries.insertTask(
+                            params.title,
+                            params.description ?? null,
+                            params.priority ?? 2,
+                            params.status ?? 'backlog',
+                            params.tags ?? null,
+                            params.source ?? null,
+                            params.sort_order ?? 0
+                        );
+                        const created = queries.getTaskById(id);
+                        // Auto-log creation
+                        queries.insertTaskLog(id, `Task created: ${params.title}`);
+                        return { success: true, action, task: created };
+                    }
+
+                    case 'read': {
+                        if (!params.id) {
+                            return { success: false, action, error: 'id is required for read' };
+                        }
+                        const t = queries.getTaskById(params.id);
+                        if (!t) {
+                            return { success: false, action, error: `Task #${params.id} not found` };
+                        }
+                        const log = queries.getTaskLog(params.id);
+                        return { success: true, action, task: t, log };
+                    }
+
+                    case 'update': {
+                        if (!params.id) {
+                            return { success: false, action, error: 'id is required for update' };
+                        }
+                        const fields: Record<string, unknown> = {};
+                        if (params.title !== undefined) fields.title = params.title;
+                        if (params.description !== undefined) fields.description = params.description;
+                        if (params.priority !== undefined) fields.priority = params.priority;
+                        if (params.status !== undefined) fields.status = params.status;
+                        if (params.tags !== undefined) fields.tags = params.tags;
+                        if (params.source !== undefined) fields.source = params.source;
+                        if (params.sort_order !== undefined) fields.sort_order = params.sort_order;
+
+                        const updated = queries.updateTask(params.id, fields);
+                        if (!updated) {
+                            return { success: false, action, error: `Task #${params.id} not found` };
+                        }
+
+                        // Auto-log status changes
+                        if (params.status) {
+                            queries.insertTaskLog(params.id, `Status changed to: ${params.status}`);
+                        }
+
+                        const t = queries.getTaskById(params.id);
+                        return { success: true, action, task: t };
+                    }
+
+                    case 'delete': {
+                        if (!params.id) {
+                            return { success: false, action, error: 'id is required for delete' };
+                        }
+                        const deleted = queries.deleteTask(params.id);
+                        if (!deleted) {
+                            return { success: false, action, error: `Task #${params.id} not found` };
+                        }
+                        return { success: true, action };
+                    }
+
+                    case 'log': {
+                        if (!params.id) {
+                            return { success: false, action, error: 'id is required for log' };
+                        }
+                        if (!params.note) {
+                            return { success: false, action, error: 'note is required for log' };
+                        }
+                        const existing = queries.getTaskById(params.id);
+                        if (!existing) {
+                            return { success: false, action, error: `Task #${params.id} not found` };
+                        }
+                        queries.insertTaskLog(params.id, params.note);
+                        const log = queries.getTaskLog(params.id);
+                        return { success: true, action, task: existing, log };
+                    }
+
+                    default:
+                        return { success: false, action, error: `Unknown action: ${action}` };
                 }
-                const id = queries.insertTask(
-                    params.title,
-                    params.description ?? null,
-                    params.priority ?? 2,
-                    params.status ?? 'backlog',
-                    params.tags ?? null,
-                    params.source ?? null,
-                    params.sort_order ?? 0
-                );
-                const created = queries.getTaskById(id);
-                // Auto-log creation
-                queries.insertTaskLog(id, `Task created: ${params.title}`);
-                return { success: true, action, task: created };
+            } catch (error) {
+                return {
+                    success: false,
+                    action,
+                    error: error instanceof Error ? error.message : String(error),
+                };
             }
-
-            case 'read': {
-                if (!params.id) {
-                    return { success: false, action, error: 'id is required for read' };
-                }
-                const t = queries.getTaskById(params.id);
-                if (!t) {
-                    return { success: false, action, error: `Task #${params.id} not found` };
-                }
-                const log = queries.getTaskLog(params.id);
-                return { success: true, action, task: t, log };
-            }
-
-            case 'update': {
-                if (!params.id) {
-                    return { success: false, action, error: 'id is required for update' };
-                }
-                const fields: Record<string, unknown> = {};
-                if (params.title !== undefined) fields.title = params.title;
-                if (params.description !== undefined) fields.description = params.description;
-                if (params.priority !== undefined) fields.priority = params.priority;
-                if (params.status !== undefined) fields.status = params.status;
-                if (params.tags !== undefined) fields.tags = params.tags;
-                if (params.source !== undefined) fields.source = params.source;
-                if (params.sort_order !== undefined) fields.sort_order = params.sort_order;
-
-                const updated = queries.updateTask(params.id, fields);
-                if (!updated) {
-                    return { success: false, action, error: `Task #${params.id} not found` };
-                }
-
-                // Auto-log status changes
-                if (params.status) {
-                    queries.insertTaskLog(params.id, `Status changed to: ${params.status}`);
-                }
-
-                const t = queries.getTaskById(params.id);
-                return { success: true, action, task: t };
-            }
-
-            case 'delete': {
-                if (!params.id) {
-                    return { success: false, action, error: 'id is required for delete' };
-                }
-                const deleted = queries.deleteTask(params.id);
-                if (!deleted) {
-                    return { success: false, action, error: `Task #${params.id} not found` };
-                }
-                return { success: true, action };
-            }
-
-            case 'log': {
-                if (!params.id) {
-                    return { success: false, action, error: 'id is required for log' };
-                }
-                if (!params.note) {
-                    return { success: false, action, error: 'note is required for log' };
-                }
-                const existing = queries.getTaskById(params.id);
-                if (!existing) {
-                    return { success: false, action, error: `Task #${params.id} not found` };
-                }
-                queries.insertTaskLog(params.id, params.note);
-                const log = queries.getTaskLog(params.id);
-                return { success: true, action, task: existing, log };
-            }
-
-            default:
-                return { success: false, action, error: `Unknown action: ${action}` };
-        }
-    } catch (error) {
-        return {
-            success: false,
-            action,
-            error: error instanceof Error ? error.message : String(error),
-        };
+        });
     } finally {
-        db.close();
         // Notify viewer of task changes (no-op if viewer not running)
         if (action !== 'read') {
             broadcastTaskUpdate();
@@ -253,49 +250,46 @@ export function task(params: TaskParams): TaskResult {
 export function tasks(params: TasksParams): TasksResult {
     const { path: projectPath } = params;
 
-    const dbPath = join(projectPath, INDEX_DIR, 'index.db');
-    if (!existsSync(dbPath)) {
+    const dbPath = validateIndex(projectPath);
+    if (!dbPath) {
         return {
             success: false,
             tasks: [],
             total: 0,
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
+            error: noIndexError(projectPath),
         };
     }
 
-    const db = openDatabase(dbPath, false);
+    return withDatabase(dbPath, false, (db, queries) => {
+        try {
+            ensureTaskTables(db);
+            let result: TaskRow[];
 
-    try {
-        ensureTaskTables(db);
-        const queries = createQueries(db);
-        let result: TaskRow[];
+            if (params.status) {
+                result = queries.getTasksByStatus(params.status);
+            } else {
+                result = queries.getAllTasks();
+            }
 
-        if (params.status) {
-            result = queries.getTasksByStatus(params.status);
-        } else {
-            result = queries.getAllTasks();
+            // Client-side filtering for priority and tag
+            if (params.priority) {
+                result = result.filter(t => t.priority === params.priority);
+            }
+            if (params.tag) {
+                const tagLower = params.tag.toLowerCase();
+                result = result.filter(t =>
+                    t.tags?.toLowerCase().split(',').map(s => s.trim()).includes(tagLower)
+                );
+            }
+
+            return { success: true, tasks: result, total: result.length };
+        } catch (error) {
+            return {
+                success: false,
+                tasks: [],
+                total: 0,
+                error: error instanceof Error ? error.message : String(error),
+            };
         }
-
-        // Client-side filtering for priority and tag
-        if (params.priority) {
-            result = result.filter(t => t.priority === params.priority);
-        }
-        if (params.tag) {
-            const tagLower = params.tag.toLowerCase();
-            result = result.filter(t =>
-                t.tags?.toLowerCase().split(',').map(s => s.trim()).includes(tagLower)
-            );
-        }
-
-        return { success: true, tasks: result, total: result.length };
-    } catch (error) {
-        return {
-            success: false,
-            tasks: [],
-            total: 0,
-            error: error instanceof Error ? error.message : String(error),
-        };
-    } finally {
-        db.close();
-    }
+    });
 }

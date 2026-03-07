@@ -2,6 +2,33 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.12.0] - 2026-03-07
+
+### Added
+- **Auto-setup on install**: `npm install -g aidex-mcp` now automatically registers AiDex with all detected AI clients and installs AI instructions (`CLAUDE.md`, `GEMINI.md`)
+  - Opt-out via `AIDEX_NO_SETUP=1` or `CI` environment variable
+  - Graceful fallback: shows manual hint if auto-setup fails
+- **Comprehensive AI instructions**: The CLAUDE.md block installed by `aidex setup` now covers all 27 tools
+  - Decision tree: "Do I want to search code? → .aidex/ exists? → STOP, use AiDex"
+  - Explicit ❌/✅ examples (never Grep when .aidex exists)
+  - Search modes explained (exact/contains/starts_with)
+  - Session notes, task backlog, global search, screenshots — all with examples
+- **Duplicate detection**: `aidex setup` skips CLAUDE.md/GEMINI.md if manual AiDex instructions already exist (avoids double entries)
+
+### Changed
+- **Refactored commands**: Extracted shared utilities into `shared.ts` and `global-shared.ts`
+  - `validateIndex()`, `noIndexError()`, `withDatabase()`, `withProjectDb()` — ~200 lines of boilerplate eliminated across 10 command files
+  - `withGlobalDb()`, `EMPTY_TOTALS` — 4 global commands refactored
+- **README**: Expanded "Make your AI use it" section with full best-practice instruction block
+
+### Fixed
+- **DB transactions**: `clearFileData()` and `bulkInsert*()` now wrapped in transactions
+- **N+1 query**: Batch `getOccurrencesByItems()` replaces per-item queries
+- **Stats query**: `getStats()` reduced from 7 queries to 1
+- **SQL injection**: `global-signatures.ts` — `t.kind = '${kind}'` → parameterized query
+- **Session**: Eliminated duplicate `getMetadata` calls
+- **Tasks**: Added null-check for `tableInfo` result
+
 ## [1.11.0] - 2026-03-07
 
 ### Added

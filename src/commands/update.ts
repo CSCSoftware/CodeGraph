@@ -9,11 +9,10 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { minimatch } from 'minimatch';
-import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
 
-import { openDatabase, createQueries, type AiDexDatabase, type Queries } from '../db/index.js';
 import { extract } from '../parser/index.js';
 import { DEFAULT_EXCLUDE, readGitignore, shortHash } from './init.js';
+import { validateIndex, noIndexError, withDatabase, withProjectDb } from './shared.js';
 
 // ============================================================
 // Types
@@ -48,10 +47,8 @@ export function update(params: UpdateParams): UpdateResult {
     const relativePath = params.file.replace(/\\/g, '/');
 
     // Validate project path
-    const indexDir = join(projectPath, INDEX_DIR);
-    const dbPath = join(indexDir, 'index.db');
-
-    if (!existsSync(dbPath)) {
+    const dbPath = validateIndex(projectPath);
+    if (!dbPath) {
         return {
             success: false,
             file: relativePath,
@@ -60,7 +57,7 @@ export function update(params: UpdateParams): UpdateResult {
             methodsUpdated: 0,
             typesUpdated: 0,
             durationMs: Date.now() - startTime,
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
+            error: noIndexError(projectPath),
         };
     }
 
@@ -98,18 +95,189 @@ export function update(params: UpdateParams): UpdateResult {
         };
     }
 
-    // Open database
-    const db = openDatabase(dbPath);
-    const queries = createQueries(db);
-
-    try {
-        // Check if file is already indexed
-        const existingFile = queries.getFileByPath(relativePath);
-
-        // Read file content
-        let content: string;
+    return withDatabase(dbPath, false, (db, queries) => {
         try {
-            content = readFileSync(absolutePath, 'utf-8');
+            // Check if file is already indexed
+            const existingFile = queries.getFileByPath(relativePath);
+
+            // Read file content
+            let content: string;
+            try {
+                content = readFileSync(absolutePath, 'utf-8');
+            } catch (err) {
+                return {
+                    success: false,
+                    file: relativePath,
+                    itemsAdded: 0,
+                    itemsRemoved: 0,
+                    methodsUpdated: 0,
+                    typesUpdated: 0,
+                    durationMs: Date.now() - startTime,
+                    error: `Cannot read file: ${err instanceof Error ? err.message : String(err)}`,
+                };
+            }
+
+            // Calculate new hash
+            const newHash = shortHash(content);
+
+            // Check if file has actually changed
+            if (existingFile && existingFile.hash === newHash) {
+                return {
+                    success: true,
+                    file: relativePath,
+                    itemsAdded: 0,
+                    itemsRemoved: 0,
+                    methodsUpdated: 0,
+                    typesUpdated: 0,
+                    durationMs: Date.now() - startTime,
+                    error: 'File unchanged (hash match)',
+                };
+            }
+
+            // Extract data from file
+            const extraction = extract(content, relativePath);
+            if (!extraction) {
+                return {
+                    success: false,
+                    file: relativePath,
+                    itemsAdded: 0,
+                    itemsRemoved: 0,
+                    methodsUpdated: 0,
+                    typesUpdated: 0,
+                    durationMs: Date.now() - startTime,
+                    error: 'Unsupported file type or parse error',
+                };
+            }
+
+            // Count old items for comparison
+            let oldItemCount = 0;
+            let oldMethodCount = 0;
+            let oldTypeCount = 0;
+
+            if (existingFile) {
+                const oldOccurrences = queries.getOccurrencesByFile(existingFile.id);
+                oldItemCount = new Set(oldOccurrences.map(o => o.item_id)).size;
+                oldMethodCount = queries.getMethodsByFile(existingFile.id).length;
+                oldTypeCount = queries.getTypesByFile(existingFile.id).length;
+            }
+
+            // Split content into lines for hashing
+            const contentLines = content.split('\n');
+            const now = Date.now();
+
+            // Build map of old line hashes to modified timestamps (for diff tracking)
+            // Key is the hash, not line_number - so moved lines keep their timestamp
+            const oldHashToModified = new Map<string, number>();
+            if (existingFile) {
+                const oldLines = queries.getLinesByFile(existingFile.id);
+                for (const line of oldLines) {
+                    if (line.line_hash && line.modified) {
+                        // If same hash appears multiple times, keep the oldest timestamp
+                        const existing = oldHashToModified.get(line.line_hash);
+                        if (!existing || line.modified < existing) {
+                            oldHashToModified.set(line.line_hash, line.modified);
+                        }
+                    }
+                }
+            }
+
+            // Perform update in transaction
+            let fileId: number;
+            let newItemCount = 0;
+
+            db.transaction(() => {
+                if (existingFile) {
+                    // Clear existing data for this file
+                    queries.clearFileData(existingFile.id);
+
+                    // Update hash
+                    queries.updateFileHash(existingFile.id, newHash);
+                    fileId = existingFile.id;
+                } else {
+                    // Insert new file record
+                    fileId = queries.insertFile(relativePath, newHash);
+                }
+
+                // Insert lines with diff tracking
+                let lineId = 1;
+                for (const line of extraction.lines) {
+                    const lineContent = contentLines[line.lineNumber - 1] ?? '';
+                    const lineHash = shortHash(lineContent);
+
+                    // Check if this hash existed before (regardless of line number)
+                    const oldModified = oldHashToModified.get(lineHash);
+                    const modified = oldModified ?? now;  // Keep old timestamp if hash existed
+
+                    queries.insertLine(fileId, lineId++, line.lineNumber, line.lineType, lineHash, modified);
+                }
+
+                // Build line number to line ID mapping
+                const lineNumberToId = new Map<number, number>();
+                lineId = 1;
+                for (const line of extraction.lines) {
+                    lineNumberToId.set(line.lineNumber, lineId++);
+                }
+
+                // Insert items and occurrences
+                const itemsInserted = new Set<string>();
+                for (const item of extraction.items) {
+                    let itemLineId = lineNumberToId.get(item.lineNumber);
+                    if (itemLineId === undefined) {
+                        // Line wasn't recorded, add it now
+                        const newLineId = lineId++;
+                        const lineContent = contentLines[item.lineNumber - 1] ?? '';
+                        const lineHash = shortHash(lineContent);
+
+                        const oldModified = oldHashToModified.get(lineHash);
+                        const modified = oldModified ?? now;
+
+                        queries.insertLine(fileId, newLineId, item.lineNumber, item.lineType, lineHash, modified);
+                        lineNumberToId.set(item.lineNumber, newLineId);
+                        itemLineId = newLineId;
+                    }
+
+                    const itemId = queries.getOrCreateItem(item.term);
+                    queries.insertOccurrence(itemId, fileId, itemLineId);
+                    itemsInserted.add(item.term);
+                }
+                newItemCount = itemsInserted.size;
+
+                // Insert methods
+                for (const method of extraction.methods) {
+                    queries.insertMethod(
+                        fileId,
+                        method.name,
+                        method.prototype,
+                        method.lineNumber,
+                        method.visibility,
+                        method.isStatic,
+                        method.isAsync
+                    );
+                }
+
+                // Insert types
+                for (const type of extraction.types) {
+                    queries.insertType(fileId, type.name, type.kind, type.lineNumber);
+                }
+
+                // Insert signature (header comments)
+                if (extraction.headerComments.length > 0) {
+                    queries.insertSignature(fileId, extraction.headerComments.join('\n'));
+                }
+            });
+
+            // Cleanup unused items
+            queries.deleteUnusedItems();
+
+            return {
+                success: true,
+                file: relativePath,
+                itemsAdded: Math.max(0, newItemCount - oldItemCount),
+                itemsRemoved: Math.max(0, oldItemCount - newItemCount),
+                methodsUpdated: extraction.methods.length,
+                typesUpdated: extraction.types.length,
+                durationMs: Date.now() - startTime,
+            };
         } catch (err) {
             return {
                 success: false,
@@ -119,186 +287,10 @@ export function update(params: UpdateParams): UpdateResult {
                 methodsUpdated: 0,
                 typesUpdated: 0,
                 durationMs: Date.now() - startTime,
-                error: `Cannot read file: ${err instanceof Error ? err.message : String(err)}`,
+                error: err instanceof Error ? err.message : String(err),
             };
         }
-
-        // Calculate new hash
-        const newHash = shortHash(content);
-
-        // Check if file has actually changed
-        if (existingFile && existingFile.hash === newHash) {
-            return {
-                success: true,
-                file: relativePath,
-                itemsAdded: 0,
-                itemsRemoved: 0,
-                methodsUpdated: 0,
-                typesUpdated: 0,
-                durationMs: Date.now() - startTime,
-                error: 'File unchanged (hash match)',
-            };
-        }
-
-        // Extract data from file
-        const extraction = extract(content, relativePath);
-        if (!extraction) {
-            return {
-                success: false,
-                file: relativePath,
-                itemsAdded: 0,
-                itemsRemoved: 0,
-                methodsUpdated: 0,
-                typesUpdated: 0,
-                durationMs: Date.now() - startTime,
-                error: 'Unsupported file type or parse error',
-            };
-        }
-
-        // Count old items for comparison
-        let oldItemCount = 0;
-        let oldMethodCount = 0;
-        let oldTypeCount = 0;
-
-        if (existingFile) {
-            const oldOccurrences = queries.getOccurrencesByFile(existingFile.id);
-            oldItemCount = new Set(oldOccurrences.map(o => o.item_id)).size;
-            oldMethodCount = queries.getMethodsByFile(existingFile.id).length;
-            oldTypeCount = queries.getTypesByFile(existingFile.id).length;
-        }
-
-        // Split content into lines for hashing
-        const contentLines = content.split('\n');
-        const now = Date.now();
-
-        // Build map of old line hashes to modified timestamps (for diff tracking)
-        // Key is the hash, not line_number - so moved lines keep their timestamp
-        const oldHashToModified = new Map<string, number>();
-        if (existingFile) {
-            const oldLines = queries.getLinesByFile(existingFile.id);
-            for (const line of oldLines) {
-                if (line.line_hash && line.modified) {
-                    // If same hash appears multiple times, keep the oldest timestamp
-                    const existing = oldHashToModified.get(line.line_hash);
-                    if (!existing || line.modified < existing) {
-                        oldHashToModified.set(line.line_hash, line.modified);
-                    }
-                }
-            }
-        }
-
-        // Perform update in transaction
-        let fileId: number;
-        let newItemCount = 0;
-
-        db.transaction(() => {
-            if (existingFile) {
-                // Clear existing data for this file
-                queries.clearFileData(existingFile.id);
-
-                // Update hash
-                queries.updateFileHash(existingFile.id, newHash);
-                fileId = existingFile.id;
-            } else {
-                // Insert new file record
-                fileId = queries.insertFile(relativePath, newHash);
-            }
-
-            // Insert lines with diff tracking
-            let lineId = 1;
-            for (const line of extraction.lines) {
-                const lineContent = contentLines[line.lineNumber - 1] ?? '';
-                const lineHash = shortHash(lineContent);
-
-                // Check if this hash existed before (regardless of line number)
-                const oldModified = oldHashToModified.get(lineHash);
-                const modified = oldModified ?? now;  // Keep old timestamp if hash existed
-
-                queries.insertLine(fileId, lineId++, line.lineNumber, line.lineType, lineHash, modified);
-            }
-
-            // Build line number to line ID mapping
-            const lineNumberToId = new Map<number, number>();
-            lineId = 1;
-            for (const line of extraction.lines) {
-                lineNumberToId.set(line.lineNumber, lineId++);
-            }
-
-            // Insert items and occurrences
-            const itemsInserted = new Set<string>();
-            for (const item of extraction.items) {
-                let itemLineId = lineNumberToId.get(item.lineNumber);
-                if (itemLineId === undefined) {
-                    // Line wasn't recorded, add it now
-                    const newLineId = lineId++;
-                    const lineContent = contentLines[item.lineNumber - 1] ?? '';
-                    const lineHash = shortHash(lineContent);
-
-                    const oldModified = oldHashToModified.get(lineHash);
-                    const modified = oldModified ?? now;
-
-                    queries.insertLine(fileId, newLineId, item.lineNumber, item.lineType, lineHash, modified);
-                    lineNumberToId.set(item.lineNumber, newLineId);
-                    itemLineId = newLineId;
-                }
-
-                const itemId = queries.getOrCreateItem(item.term);
-                queries.insertOccurrence(itemId, fileId, itemLineId);
-                itemsInserted.add(item.term);
-            }
-            newItemCount = itemsInserted.size;
-
-            // Insert methods
-            for (const method of extraction.methods) {
-                queries.insertMethod(
-                    fileId,
-                    method.name,
-                    method.prototype,
-                    method.lineNumber,
-                    method.visibility,
-                    method.isStatic,
-                    method.isAsync
-                );
-            }
-
-            // Insert types
-            for (const type of extraction.types) {
-                queries.insertType(fileId, type.name, type.kind, type.lineNumber);
-            }
-
-            // Insert signature (header comments)
-            if (extraction.headerComments.length > 0) {
-                queries.insertSignature(fileId, extraction.headerComments.join('\n'));
-            }
-        });
-
-        // Cleanup unused items
-        queries.deleteUnusedItems();
-
-        db.close();
-
-        return {
-            success: true,
-            file: relativePath,
-            itemsAdded: Math.max(0, newItemCount - oldItemCount),
-            itemsRemoved: Math.max(0, oldItemCount - newItemCount),
-            methodsUpdated: extraction.methods.length,
-            typesUpdated: extraction.types.length,
-            durationMs: Date.now() - startTime,
-        };
-    } catch (err) {
-        db.close();
-        return {
-            success: false,
-            file: relativePath,
-            itemsAdded: 0,
-            itemsRemoved: 0,
-            methodsUpdated: 0,
-            typesUpdated: 0,
-            durationMs: Date.now() - startTime,
-            error: err instanceof Error ? err.message : String(err),
-        };
-    }
+    });
 }
 
 // ============================================================
@@ -322,56 +314,41 @@ export function remove(params: RemoveParams): RemoveResult {
     // Normalize path to forward slashes
     const relativePath = params.file.replace(/\\/g, '/');
 
-    // Validate project path
-    const indexDir = join(projectPath, INDEX_DIR);
-    const dbPath = join(indexDir, 'index.db');
+    return withProjectDb(
+        projectPath, false,
+        (error) => ({ success: false, file: relativePath, removed: false, error }),
+        (db, queries) => {
+            try {
+                const existingFile = queries.getFileByPath(relativePath);
 
-    if (!existsSync(dbPath)) {
-        return {
-            success: false,
-            file: relativePath,
-            removed: false,
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
-        };
-    }
+                if (!existingFile) {
+                    return {
+                        success: true,
+                        file: relativePath,
+                        removed: false,
+                        error: 'File not found in index',
+                    };
+                }
 
-    // Open database
-    const db = openDatabase(dbPath);
-    const queries = createQueries(db);
+                // Delete file (CASCADE will handle related data)
+                db.transaction(() => {
+                    queries.deleteFile(existingFile.id);
+                    queries.deleteUnusedItems();
+                });
 
-    try {
-        const existingFile = queries.getFileByPath(relativePath);
-
-        if (!existingFile) {
-            db.close();
-            return {
-                success: true,
-                file: relativePath,
-                removed: false,
-                error: 'File not found in index',
-            };
+                return {
+                    success: true,
+                    file: relativePath,
+                    removed: true,
+                };
+            } catch (err) {
+                return {
+                    success: false,
+                    file: relativePath,
+                    removed: false,
+                    error: err instanceof Error ? err.message : String(err),
+                };
+            }
         }
-
-        // Delete file (CASCADE will handle related data)
-        db.transaction(() => {
-            queries.deleteFile(existingFile.id);
-            queries.deleteUnusedItems();
-        });
-
-        db.close();
-
-        return {
-            success: true,
-            file: relativePath,
-            removed: true,
-        };
-    } catch (err) {
-        db.close();
-        return {
-            success: false,
-            file: relativePath,
-            removed: false,
-            error: err instanceof Error ? err.message : String(err),
-        };
-    }
+    );
 }

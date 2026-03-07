@@ -6,9 +6,9 @@
 
 import { existsSync } from 'fs';
 import { join, basename } from 'path';
-import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
-
-import { openDatabase, createQueries } from '../db/index.js';
+import { INDEX_DIR } from '../constants.js';
+import { openDatabase } from '../db/index.js';
+import { validateIndex, noIndexError, withProjectDb, withDatabase } from './shared.js';
 
 // ============================================================
 // Types
@@ -65,79 +65,71 @@ export function link(params: LinkParams): LinkResult {
     const { path: projectPath, dependency: dependencyPath, name } = params;
 
     // Validate project path
-    const indexDir = join(projectPath, INDEX_DIR);
-    const dbPath = join(indexDir, 'index.db');
-
-    if (!existsSync(dbPath)) {
+    const dbPath = validateIndex(projectPath);
+    if (!dbPath) {
         return {
             success: false,
             name: '',
             filesAvailable: 0,
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
+            error: noIndexError(projectPath),
         };
     }
 
     // Validate dependency path
-    const depIndexDir = join(dependencyPath, INDEX_DIR);
-    const depDbPath = join(depIndexDir, 'index.db');
-
-    if (!existsSync(depDbPath)) {
+    const depDbPath = validateIndex(dependencyPath);
+    if (!depDbPath) {
         return {
             success: false,
             name: '',
             filesAvailable: 0,
-            error: `No ${PRODUCT_NAME} index found at ${dependencyPath}. Run ${TOOL_PREFIX}init on dependency first.`,
+            error: `No AiDex index found at ${dependencyPath}. Run aidex_init on dependency first.`,
         };
     }
 
-    // Open main database
-    const db = openDatabase(dbPath);
+    return withDatabase(dbPath, false, (db) => {
+        try {
+            // Get dependency info
+            const depDb = openDatabase(depDbPath, true);
+            const depStats = depDb.getStats();
+            const depName = name ?? depDb.getMetadata('project_name') ?? basename(dependencyPath);
+            depDb.close();
 
-    try {
-        // Get dependency info
-        const depDb = openDatabase(depDbPath, true);
-        const depStats = depDb.getStats();
-        const depName = name ?? depDb.getMetadata('project_name') ?? basename(dependencyPath);
-        depDb.close();
+            // Check if already linked
+            const existingDep = db.getDb().prepare(
+                'SELECT * FROM dependencies WHERE path = ?'
+            ).get(dependencyPath) as { id: number } | undefined;
 
-        // Check if already linked
-        const existingDep = db.getDb().prepare(
-            'SELECT * FROM dependencies WHERE path = ?'
-        ).get(dependencyPath) as { id: number } | undefined;
+            let dependencyId: number;
 
-        let dependencyId: number;
+            if (existingDep) {
+                // Update existing
+                db.getDb().prepare(
+                    'UPDATE dependencies SET name = ?, last_checked = ? WHERE id = ?'
+                ).run(depName, Date.now(), existingDep.id);
+                dependencyId = existingDep.id;
+            } else {
+                // Insert new
+                const result = db.getDb().prepare(
+                    'INSERT INTO dependencies (path, name, last_checked) VALUES (?, ?, ?)'
+                ).run(dependencyPath, depName, Date.now());
+                dependencyId = result.lastInsertRowid as number;
+            }
 
-        if (existingDep) {
-            // Update existing
-            db.getDb().prepare(
-                'UPDATE dependencies SET name = ?, last_checked = ? WHERE id = ?'
-            ).run(depName, Date.now(), existingDep.id);
-            dependencyId = existingDep.id;
-        } else {
-            // Insert new
-            const result = db.getDb().prepare(
-                'INSERT INTO dependencies (path, name, last_checked) VALUES (?, ?, ?)'
-            ).run(dependencyPath, depName, Date.now());
-            dependencyId = result.lastInsertRowid as number;
+            return {
+                success: true,
+                dependencyId,
+                name: depName,
+                filesAvailable: depStats.files,
+            };
+        } catch (err) {
+            return {
+                success: false,
+                name: '',
+                filesAvailable: 0,
+                error: err instanceof Error ? err.message : String(err),
+            };
         }
-
-        db.close();
-
-        return {
-            success: true,
-            dependencyId,
-            name: depName,
-            filesAvailable: depStats.files,
-        };
-    } catch (err) {
-        db.close();
-        return {
-            success: false,
-            name: '',
-            filesAvailable: 0,
-            error: err instanceof Error ? err.message : String(err),
-        };
-    }
+    });
 }
 
 // ============================================================
@@ -147,40 +139,28 @@ export function link(params: LinkParams): LinkResult {
 export function unlink(params: UnlinkParams): UnlinkResult {
     const { path: projectPath, dependency: dependencyPath } = params;
 
-    // Validate project path
-    const indexDir = join(projectPath, INDEX_DIR);
-    const dbPath = join(indexDir, 'index.db');
+    return withProjectDb(
+        projectPath, false,
+        (error) => ({ success: false, removed: false, error }),
+        (db) => {
+            try {
+                const result = db.getDb().prepare(
+                    'DELETE FROM dependencies WHERE path = ?'
+                ).run(dependencyPath);
 
-    if (!existsSync(dbPath)) {
-        return {
-            success: false,
-            removed: false,
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
-        };
-    }
-
-    // Open database
-    const db = openDatabase(dbPath);
-
-    try {
-        const result = db.getDb().prepare(
-            'DELETE FROM dependencies WHERE path = ?'
-        ).run(dependencyPath);
-
-        db.close();
-
-        return {
-            success: true,
-            removed: result.changes > 0,
-        };
-    } catch (err) {
-        db.close();
-        return {
-            success: false,
-            removed: false,
-            error: err instanceof Error ? err.message : String(err),
-        };
-    }
+                return {
+                    success: true,
+                    removed: result.changes > 0,
+                };
+            } catch (err) {
+                return {
+                    success: false,
+                    removed: false,
+                    error: err instanceof Error ? err.message : String(err),
+                };
+            }
+        }
+    );
 }
 
 // ============================================================
@@ -190,64 +170,52 @@ export function unlink(params: UnlinkParams): UnlinkResult {
 export function listLinks(params: ListLinksParams): ListLinksResult {
     const { path: projectPath } = params;
 
-    // Validate project path
-    const indexDir = join(projectPath, INDEX_DIR);
-    const dbPath = join(indexDir, 'index.db');
+    return withProjectDb(
+        projectPath, true,
+        (error) => ({ success: false, dependencies: [], error }),
+        (db) => {
+            try {
+                const deps = db.getDb().prepare(
+                    'SELECT * FROM dependencies ORDER BY name'
+                ).all() as Array<{ id: number; path: string; name: string | null; last_checked: number | null }>;
 
-    if (!existsSync(dbPath)) {
-        return {
-            success: false,
-            dependencies: [],
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
-        };
-    }
+                const dependencies: LinkedProject[] = [];
 
-    // Open database
-    const db = openDatabase(dbPath, true);
+                for (const dep of deps) {
+                    const depDbPath = join(dep.path, INDEX_DIR, 'index.db');
+                    const available = existsSync(depDbPath);
 
-    try {
-        const deps = db.getDb().prepare(
-            'SELECT * FROM dependencies ORDER BY name'
-        ).all() as Array<{ id: number; path: string; name: string | null; last_checked: number | null }>;
+                    let filesAvailable = 0;
+                    if (available) {
+                        try {
+                            const depDb = openDatabase(depDbPath, true);
+                            filesAvailable = depDb.getStats().files;
+                            depDb.close();
+                        } catch {
+                            // Ignore errors reading dependency
+                        }
+                    }
 
-        const dependencies: LinkedProject[] = [];
-
-        for (const dep of deps) {
-            const depDbPath = join(dep.path, INDEX_DIR, 'index.db');
-            const available = existsSync(depDbPath);
-
-            let filesAvailable = 0;
-            if (available) {
-                try {
-                    const depDb = openDatabase(depDbPath, true);
-                    filesAvailable = depDb.getStats().files;
-                    depDb.close();
-                } catch {
-                    // Ignore errors reading dependency
+                    dependencies.push({
+                        id: dep.id,
+                        path: dep.path,
+                        name: dep.name,
+                        filesAvailable,
+                        available,
+                    });
                 }
+
+                return {
+                    success: true,
+                    dependencies,
+                };
+            } catch (err) {
+                return {
+                    success: false,
+                    dependencies: [],
+                    error: err instanceof Error ? err.message : String(err),
+                };
             }
-
-            dependencies.push({
-                id: dep.id,
-                path: dep.path,
-                name: dep.name,
-                filesAvailable,
-                available,
-            });
         }
-
-        db.close();
-
-        return {
-            success: true,
-            dependencies,
-        };
-    } catch (err) {
-        db.close();
-        return {
-            success: false,
-            dependencies: [],
-            error: err instanceof Error ? err.message : String(err),
-        };
-    }
+    );
 }

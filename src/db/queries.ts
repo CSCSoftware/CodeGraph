@@ -282,6 +282,32 @@ export class Queries {
         return this._getOccurrencesByItem.all(itemId) as Array<{ file_id: number; line_id: number; line_number: number; path: string; line_type: string; modified: number | null }>;
     }
 
+    /**
+     * Get occurrences for multiple items at once (eliminates N+1 queries).
+     * Returns results grouped by item_id.
+     */
+    getOccurrencesByItems(itemIds: number[]): Array<{ item_id: number; file_id: number; line_id: number; line_number: number; path: string; line_type: string; modified: number | null }> {
+        if (itemIds.length === 0) return [];
+        // SQLite has a max variable limit (~999), batch if needed
+        const results: Array<{ item_id: number; file_id: number; line_id: number; line_number: number; path: string; line_type: string; modified: number | null }> = [];
+        const batchSize = 500;
+        for (let i = 0; i < itemIds.length; i += batchSize) {
+            const batch = itemIds.slice(i, i + batchSize);
+            const placeholders = batch.map(() => '?').join(',');
+            const sql = `
+                SELECT o.item_id, o.file_id, o.line_id, l.line_number, f.path, l.line_type, l.modified
+                FROM occurrences o
+                JOIN lines l ON o.file_id = l.file_id AND o.line_id = l.id
+                JOIN files f ON o.file_id = f.id
+                WHERE o.item_id IN (${placeholders})
+                ORDER BY f.path, l.line_number
+            `;
+            const rows = this.db.prepare(sql).all(...batch) as Array<{ item_id: number; file_id: number; line_id: number; line_number: number; path: string; line_type: string; modified: number | null }>;
+            results.push(...rows);
+        }
+        return results;
+    }
+
     getOccurrencesByFile(fileId: number): OccurrenceRow[] {
         this._getOccurrencesByFile ??= this.db.prepare(
             'SELECT * FROM occurrences WHERE file_id = ?'
@@ -428,12 +454,14 @@ export class Queries {
      * Clear all data for a file (before re-indexing)
      */
     clearFileData(fileId: number): void {
-        // Order matters due to foreign keys
-        this.deleteOccurrencesByFile(fileId);
-        this.deleteMethodsByFile(fileId);
-        this.deleteTypesByFile(fileId);
-        this.deleteSignatureByFile(fileId);
-        this.deleteLinesByFile(fileId);
+        this.db.transaction(() => {
+            // Order matters due to foreign keys
+            this.deleteOccurrencesByFile(fileId);
+            this.deleteMethodsByFile(fileId);
+            this.deleteTypesByFile(fileId);
+            this.deleteSignatureByFile(fileId);
+            this.deleteLinesByFile(fileId);
+        })();
     }
 
     /**
@@ -444,9 +472,11 @@ export class Queries {
             'INSERT INTO lines (file_id, id, line_number, line_type, line_hash, modified) VALUES (?, ?, ?, ?, ?, ?)'
         );
         const now = Date.now();
-        for (const line of lines) {
-            stmt.run(fileId, line.lineId, line.lineNumber, line.lineType, line.lineHash ?? null, line.modified ?? now);
-        }
+        this.db.transaction(() => {
+            for (const line of lines) {
+                stmt.run(fileId, line.lineId, line.lineNumber, line.lineType, line.lineHash ?? null, line.modified ?? now);
+            }
+        })();
     }
 
     /**
@@ -456,9 +486,11 @@ export class Queries {
         const stmt = this.db.prepare(
             'INSERT OR IGNORE INTO occurrences (item_id, file_id, line_id) VALUES (?, ?, ?)'
         );
-        for (const occ of occurrences) {
-            stmt.run(occ.itemId, occ.fileId, occ.lineId);
-        }
+        this.db.transaction(() => {
+            for (const occ of occurrences) {
+                stmt.run(occ.itemId, occ.fileId, occ.lineId);
+            }
+        })();
     }
 
     // --------------------------------------------------------

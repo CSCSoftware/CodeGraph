@@ -3,12 +3,8 @@
  * Retrieves file signatures (header comments, types, methods)
  */
 
-import { join, normalize } from 'path';
-import { existsSync } from 'fs';
-import { glob } from 'glob';
-import { PRODUCT_NAME, INDEX_DIR, TOOL_PREFIX } from '../constants.js';
-import { openDatabase } from '../db/index.js';
-import { createQueries, type Queries, type MethodRow, type TypeRow } from '../db/queries.js';
+import { withProjectDb } from './shared.js';
+import type { Queries } from '../db/queries.js';
 import { globToRegex } from '../utils/glob.js';
 
 // ============================================================
@@ -70,76 +66,59 @@ export function signature(params: SignatureParams): SignatureResult {
     // Normalize path to forward slashes
     const file = params.file.replace(/\\/g, '/');
 
-    // Validate project path
-    const indexDir = join(projectPath, INDEX_DIR);
-    const dbPath = join(indexDir, 'index.db');
+    return withProjectDb(
+        projectPath, true,
+        (error) => ({ success: false, file, headerComments: null, types: [], methods: [], error }),
+        (db, queries) => {
+            try {
+                // Find file in database
+                const fileRow = queries.getFileByPath(file);
+                if (!fileRow) {
+                    return {
+                        success: false,
+                        file,
+                        headerComments: null,
+                        types: [],
+                        methods: [],
+                        error: `File "${file}" not found in index. It may not be indexed or the path is incorrect.`,
+                    };
+                }
 
-    if (!existsSync(dbPath)) {
-        return {
-            success: false,
-            file,
-            headerComments: null,
-            types: [],
-            methods: [],
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
-        };
-    }
+                // Get signature data
+                const signatureRow = queries.getSignatureByFile(fileRow.id);
+                const methodRows = queries.getMethodsByFile(fileRow.id);
+                const typeRows = queries.getTypesByFile(fileRow.id);
 
-    // Open database
-    const db = openDatabase(dbPath, true); // readonly
-    const queries = createQueries(db);
-
-    try {
-        // Find file in database
-        const fileRow = queries.getFileByPath(file);
-        if (!fileRow) {
-            db.close();
-            return {
-                success: false,
-                file,
-                headerComments: null,
-                types: [],
-                methods: [],
-                error: `File "${file}" not found in index. It may not be indexed or the path is incorrect.`,
-            };
+                return {
+                    success: true,
+                    file: fileRow.path,
+                    headerComments: signatureRow?.header_comments ?? null,
+                    types: typeRows.map(t => ({
+                        name: t.name,
+                        kind: t.kind,
+                        lineNumber: t.line_number,
+                    })),
+                    methods: methodRows.map(m => ({
+                        name: m.name,
+                        prototype: m.prototype,
+                        lineNumber: m.line_number,
+                        visibility: m.visibility,
+                        isStatic: m.is_static === 1,
+                        isAsync: m.is_async === 1,
+                    })),
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    file,
+                    headerComments: null,
+                    types: [],
+                    methods: [],
+                    error: `Error retrieving signature: ${error instanceof Error ? error.message : String(error)}`,
+                };
+            }
         }
-
-        // Get signature data
-        const signatureRow = queries.getSignatureByFile(fileRow.id);
-        const methodRows = queries.getMethodsByFile(fileRow.id);
-        const typeRows = queries.getTypesByFile(fileRow.id);
-
-        db.close();
-
-        return {
-            success: true,
-            file: fileRow.path,
-            headerComments: signatureRow?.header_comments ?? null,
-            types: typeRows.map(t => ({
-                name: t.name,
-                kind: t.kind,
-                lineNumber: t.line_number,
-            })),
-            methods: methodRows.map(m => ({
-                name: m.name,
-                prototype: m.prototype,
-                lineNumber: m.line_number,
-                visibility: m.visibility,
-                isStatic: m.is_static === 1,
-                isAsync: m.is_async === 1,
-            })),
-        };
-    } catch (error) {
-        db.close();
-        return {
-            success: false,
-            file,
-            headerComments: null,
-            types: [],
-            methods: [],
-            error: `Error retrieving signature: ${error instanceof Error ? error.message : String(error)}`,
-        };
-    }
+    );
 }
 
 /**
@@ -189,72 +168,57 @@ function getSignatureFromQueries(queries: Queries, file: string): SignatureResul
 export function signatures(params: SignaturesParams): SignaturesResult {
     const { path: projectPath, pattern, files } = params;
 
-    // Validate project path
-    const indexDir = join(projectPath, INDEX_DIR);
-    const dbPath = join(indexDir, 'index.db');
+    return withProjectDb(
+        projectPath, true,
+        (error) => ({ success: false, signatures: [], totalFiles: 0, error }),
+        (db, queries) => {
+            try {
+                // Determine which files to query
+                let filesToQuery: string[] = [];
 
-    if (!existsSync(dbPath)) {
-        return {
-            success: false,
-            signatures: [],
-            totalFiles: 0,
-            error: `No ${PRODUCT_NAME} index found at ${projectPath}. Run ${TOOL_PREFIX}init first.`,
-        };
-    }
+                if (files && files.length > 0) {
+                    filesToQuery = files;
+                } else if (pattern) {
+                    const allFiles = queries.getAllFiles();
+                    const normalizedPattern = pattern.replace(/\\/g, '/');
+                    const regex = globToRegex(normalizedPattern);
 
-    // Open database ONCE for all files
-    const db = openDatabase(dbPath, true);
-    const queries = createQueries(db);
+                    filesToQuery = allFiles
+                        .map(f => f.path)
+                        .filter(p => {
+                            const normalizedPath = p.replace(/\\/g, '/');
+                            return regex.test(normalizedPath);
+                        });
+                } else {
+                    return {
+                        success: false,
+                        signatures: [],
+                        totalFiles: 0,
+                        error: 'Either pattern or files parameter is required.',
+                    };
+                }
 
-    try {
-        // Determine which files to query
-        let filesToQuery: string[] = [];
+                // Get signatures for all matched files using the same DB connection
+                const results: SignatureResult[] = [];
+                for (const file of filesToQuery) {
+                    const result = getSignatureFromQueries(queries, file);
+                    results.push(result);
+                }
 
-        if (files && files.length > 0) {
-            filesToQuery = files;
-        } else if (pattern) {
-            const allFiles = queries.getAllFiles();
-            const normalizedPattern = pattern.replace(/\\/g, '/');
-            const regex = globToRegex(normalizedPattern);
-
-            filesToQuery = allFiles
-                .map(f => f.path)
-                .filter(p => {
-                    const normalizedPath = p.replace(/\\/g, '/');
-                    return regex.test(normalizedPath);
-                });
-        } else {
-            db.close();
-            return {
-                success: false,
-                signatures: [],
-                totalFiles: 0,
-                error: 'Either pattern or files parameter is required.',
-            };
+                return {
+                    success: true,
+                    signatures: results,
+                    totalFiles: results.length,
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    signatures: [],
+                    totalFiles: 0,
+                    error: `Error retrieving signatures: ${error instanceof Error ? error.message : String(error)}`,
+                };
+            }
         }
-
-        // Get signatures for all matched files using the same DB connection
-        const results: SignatureResult[] = [];
-        for (const file of filesToQuery) {
-            const result = getSignatureFromQueries(queries, file);
-            results.push(result);
-        }
-
-        db.close();
-
-        return {
-            success: true,
-            signatures: results,
-            totalFiles: results.length,
-        };
-    } catch (error) {
-        db.close();
-        return {
-            success: false,
-            signatures: [],
-            totalFiles: 0,
-            error: `Error retrieving signatures: ${error instanceof Error ? error.message : String(error)}`,
-        };
-    }
+    );
 }
 
