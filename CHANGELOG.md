@@ -2,6 +2,13 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.12.1] - 2026-03-07
+
+### Added
+- **Update notifications**: `aidex_session` now shows "What's New" when AiDex was updated since the last session
+  - Compares installed version with `last_seen_version` stored in project DB
+  - Shows highlights + changelog link, only once per version update
+
 ## [1.12.0] - 2026-03-07
 
 ### Added

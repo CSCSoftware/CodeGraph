@@ -1721,6 +1721,15 @@ function handleSession(args: Record<string, unknown>): { content: Array<{ type: 
         message += '\n';
     }
 
+    // Version update info
+    if (result.updateInfo) {
+        message += `## 🎉 Updated: v${result.updateInfo.previousVersion} → v${result.updateInfo.currentVersion}\n\n`;
+        for (const highlight of result.updateInfo.highlights) {
+            message += `- ${highlight}\n`;
+        }
+        message += `\nFull changelog: https://github.com/CSCSoftware/AiDex/blob/master/CHANGELOG.md\n\n`;
+    }
+
     // Session note
     if (result.note) {
         message += '## 📝 Session Note\n';

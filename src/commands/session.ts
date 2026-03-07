@@ -15,6 +15,7 @@ import { openDatabase } from '../db/index.js';
 import { update } from './update.js';
 import { DEFAULT_EXCLUDE, readGitignore, shortHash } from './init.js';
 import { validateIndex, noIndexError, withProjectDb } from './shared.js';
+import { PRODUCT_VERSION } from '../constants.js';
 
 // ============================================================
 // Types
@@ -35,6 +36,12 @@ export interface ChangedFile {
     reason: 'modified' | 'deleted' | 'new';
 }
 
+export interface UpdateInfo {
+    previousVersion: string;
+    currentVersion: string;
+    highlights: string[];
+}
+
 export interface SessionResult {
     success: boolean;
     isNewSession: boolean;
@@ -42,6 +49,7 @@ export interface SessionResult {
     externalChanges: ChangedFile[];
     reindexed: string[];
     note: string | null;
+    updateInfo: UpdateInfo | null;
     error?: string;
 }
 
@@ -53,9 +61,20 @@ const KEY_LAST_SESSION_START = 'last_session_start';
 const KEY_LAST_SESSION_END = 'last_session_end';
 const KEY_CURRENT_SESSION_START = 'current_session_start';
 const KEY_SESSION_NOTE = 'session_note';
+const KEY_LAST_SEEN_VERSION = 'last_seen_version';
 
 // Session is considered "new" if more than 5 minutes have passed since last activity
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
+
+// ============================================================
+// Release Notes (update with each release)
+// ============================================================
+
+const RELEASE_HIGHLIGHTS: string[] = [
+    'Auto-setup on install — no more manual "aidex setup" needed',
+    'Comprehensive AI instructions for all 27 tools (decision tree, search modes, examples)',
+    'Code refactoring: shared utilities, DB transaction fixes, SQL injection fix',
+];
 
 // ============================================================
 // Implementation
@@ -71,7 +90,7 @@ export function session(params: SessionParams): SessionResult {
 
     return withProjectDb(
         projectPath, false,
-        (error) => ({ success: false, isNewSession: false, sessionInfo: { lastSessionStart: null, lastSessionEnd: null, currentSessionStart: null }, externalChanges: [], reindexed: [], note: null, error }),
+        (error) => ({ success: false, isNewSession: false, sessionInfo: { lastSessionStart: null, lastSessionEnd: null, currentSessionStart: null }, externalChanges: [], reindexed: [], note: null, updateInfo: null, error }),
         (db, queries) => {
             try {
                 const now = Date.now();
@@ -137,6 +156,20 @@ export function session(params: SessionParams): SessionResult {
                 // Get session note
                 const note = db.getMetadata(KEY_SESSION_NOTE);
 
+                // Check for version update
+                let updateInfo: UpdateInfo | null = null;
+                const lastSeenVersion = db.getMetadata(KEY_LAST_SEEN_VERSION);
+                if (lastSeenVersion !== PRODUCT_VERSION) {
+                    if (lastSeenVersion) {
+                        updateInfo = {
+                            previousVersion: lastSeenVersion,
+                            currentVersion: PRODUCT_VERSION,
+                            highlights: RELEASE_HIGHLIGHTS,
+                        };
+                    }
+                    db.setMetadata(KEY_LAST_SEEN_VERSION, PRODUCT_VERSION);
+                }
+
                 return {
                     success: true,
                     isNewSession,
@@ -144,6 +177,7 @@ export function session(params: SessionParams): SessionResult {
                     externalChanges,
                     reindexed,
                     note,
+                    updateInfo,
                 };
 
             } catch (error) {
@@ -154,6 +188,7 @@ export function session(params: SessionParams): SessionResult {
                     externalChanges: [],
                     reindexed: [],
                     note: null,
+                    updateInfo: null,
                     error: error instanceof Error ? error.message : String(error),
                 };
             }
