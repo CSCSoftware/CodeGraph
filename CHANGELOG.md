@@ -2,6 +2,58 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.11.0] - 2026-03-07
+
+### Added
+- **Global Search**: Search across ALL indexed projects at once — 5 new tools
+  - `aidex_global_init` — Scan directory tree, register indexed projects in `~/.aidex/global.db`, detect unindexed projects by project markers (`.csproj`, `package.json`, `Cargo.toml`, etc.)
+  - `aidex_global_status` — List all registered projects with stats, sortable by name/size/recent
+  - `aidex_global_query` — Cross-project term search (exact/contains/starts_with) with in-memory session caching (5-min TTL)
+  - `aidex_global_signatures` — Search methods/types by name across all projects, filterable by kind
+  - `aidex_global_refresh` — Update stats and remove stale projects
+  - Uses SQLite `ATTACH DATABASE` for zero-copy queries — each project DB remains the single source of truth
+  - `exclude` parameter on `global_init` to skip external repos (e.g., `["llama.cpp"]`)
+  - Auto-updates global registry after `aidex_init` / `aidex_update`
+- **Bulk Indexing**: `global_init` can auto-index all unindexed projects in one call
+  - `index_unindexed: true` — Auto-index projects with ≤500 code files
+  - Large projects (>500 files) are listed separately for user decision
+  - File count estimation uses code-only extensions (matches what `init()` actually processes)
+- **Progress UI**: Browser-based progress display for bulk indexing
+  - `show_progress: true` — Opens `http://localhost:3334` with live progress bar
+  - Server-Sent Events (SSE) for real-time updates
+  - Shows per-project status (indexing/done/error), progress bar, scrolling log
+  - Dark theme, auto-closes after completion
+- **Extended excludes**: Better handling of embedded runtimes and external code
+  - `init.ts`: Added `**/site-packages/**`, `**/Lib/**`, `**/fdk-aac/**` to DEFAULT_EXCLUDE
+  - `global-init.ts`: Added Python venvs, embedded Python runtimes (Python310-313), `.cargo`, `packages`, `fdk-aac` to DEFAULT_EXCLUDED_DIRS
+
+## [1.10.1] - 2026-03-07
+
+### Fixed
+- **npm package**: Exclude token files and `futureWork.md` from published package
+- **gitignore negation patterns**: Filter out `!` negation patterns in `.gitignore` to prevent excluding all files
+  - Negation patterns (e.g., `!.vscode/settings.json`) were passed to minimatch, which interpreted `!` as "NOT this pattern" — matching ALL files
+  - This caused the entire index to be purged after initialization in projects with negation patterns (common in monorepos)
+
+## [1.10.0] - 2026-02-17
+
+### Added
+- **Note History**: Archived notes are now searchable across sessions
+  - Old notes are automatically archived when overwritten or cleared
+  - `history: true` parameter to browse archived notes (newest first)
+  - `search: "term"` parameter to search note history (case-insensitive)
+  - `limit` parameter to control how many history entries are returned (default: 20)
+
+## [1.9.1] - 2026-02-10
+
+### Added
+- **Rect Screenshot Mode**: New `mode: "rect"` for coordinate-based screen capture
+  - Specify exact `x`, `y`, `width`, `height` in pixels
+  - Useful with accessibility bounds (e.g., from WinfoMCP `get_element_details`)
+
+### Fixed
+- **Region screenshot flicker on Windows**: Fixed visual flicker during interactive region selection
+
 ## [1.9.0] - 2026-02-06
 
 ### Added

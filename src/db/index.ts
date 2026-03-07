@@ -16,3 +16,5 @@ export type {
     TaskRow,
     TaskLogRow,
 } from './queries.js';
+export { GlobalDatabase, openGlobalDatabase, globalDbExists, getGlobalDbPath, getGlobalDir, readProjectStats } from './global-database.js';
+export type { GlobalProject, ProjectStats } from './global-database.js';

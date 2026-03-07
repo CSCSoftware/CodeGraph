@@ -5,7 +5,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, screenshot, listWindows, type QueryMode, type TaskAction, type ScreenshotMode } from '../commands/index.js';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, screenshot, listWindows, globalInit, globalStatus, globalQuery, globalSignatures, globalRefresh, type QueryMode, type TaskAction, type ScreenshotMode, type SignatureKind } from '../commands/index.js';
 import type { TaskRow } from '../db/index.js';
 import { openDatabase } from '../db/index.js';
 import { startViewer, stopViewer } from '../viewer/index.js';
@@ -561,6 +561,156 @@ export function registerTools(): Tool[] {
                 required: [],
             },
         },
+        // ============================================================
+        // Global Tools
+        // ============================================================
+        {
+            name: `${TOOL_PREFIX}global_init`,
+            description: `Scan a directory tree for ${PRODUCT_NAME}-indexed projects and register them in the global database (~/.aidex/global.db). Also finds unindexed projects (by markers like .csproj, package.json, Cargo.toml, etc.). Use this to enable cross-project searches with aidex_global_query.`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Root directory to scan for projects (e.g., "Q:/develop")',
+                    },
+                    max_depth: {
+                        type: 'number',
+                        description: 'Maximum directory depth to scan (default: 10)',
+                    },
+                    tags: {
+                        type: 'string',
+                        description: 'Tags to assign to all found projects (e.g., "privat,libs")',
+                    },
+                    exclude: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Directory names or absolute paths to exclude from scanning (e.g., ["llama.cpp", "Q:/develop/Repos/external"])',
+                    },
+                    index_unindexed: {
+                        type: 'boolean',
+                        description: 'Auto-index all unindexed projects with ≤500 estimated files. Large projects (>500 files) are skipped and listed separately for user decision.',
+                    },
+                    show_progress: {
+                        type: 'boolean',
+                        description: 'Open a browser window showing indexing progress (only with index_unindexed)',
+                    },
+                },
+                required: ['path'],
+            },
+        },
+        {
+            name: `${TOOL_PREFIX}global_status`,
+            description: `Show overview of all projects registered in the global ${PRODUCT_NAME} index. Lists project names, paths, file counts, languages, and last indexed times.`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    tag_filter: {
+                        type: 'string',
+                        description: 'Only show projects with this tag',
+                    },
+                    sort: {
+                        type: 'string',
+                        enum: ['name', 'size', 'recent'],
+                        description: 'Sort order: name (default), size (most files first), recent (most recently indexed first)',
+                    },
+                },
+                required: [],
+            },
+        },
+        {
+            name: `${TOOL_PREFIX}global_query`,
+            description: `Search for a term across ALL registered projects in the global ${PRODUCT_NAME} index. Returns matches grouped by project. Use this to find code across your entire codebase.`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    term: {
+                        type: 'string',
+                        description: 'The term to search for',
+                    },
+                    mode: {
+                        type: 'string',
+                        enum: ['exact', 'contains', 'starts_with'],
+                        description: 'Search mode: exact (default), contains, starts_with',
+                    },
+                    project_filter: {
+                        type: 'string',
+                        description: 'Glob pattern to filter project names (e.g., "Lib*")',
+                    },
+                    tag_filter: {
+                        type: 'string',
+                        description: 'Only search projects with this tag',
+                    },
+                    type_filter: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Filter by line type: code, comment, method, struct, property',
+                    },
+                    limit: {
+                        type: 'number',
+                        description: 'Max results per project (default: 20)',
+                    },
+                    limit_total: {
+                        type: 'number',
+                        description: 'Max results total across all projects (default: 100)',
+                    },
+                    no_cache: {
+                        type: 'boolean',
+                        description: 'Bypass session cache (default: false)',
+                    },
+                },
+                required: ['term'],
+            },
+        },
+        {
+            name: `${TOOL_PREFIX}global_signatures`,
+            description: `Search for methods and types by name across ALL registered projects. Returns method prototypes and type definitions grouped by project. Use to find "where is class X defined?" or "who has a method called Y?".`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    term: {
+                        type: 'string',
+                        description: 'Method or type name to search for (case-insensitive, partial match)',
+                    },
+                    kind: {
+                        type: 'string',
+                        enum: ['method', 'class', 'struct', 'interface', 'enum', 'type'],
+                        description: 'Filter by kind: method, class, struct, interface, enum, type. Omit to search all.',
+                    },
+                    project_filter: {
+                        type: 'string',
+                        description: 'Glob pattern to filter project names (e.g., "Lib*")',
+                    },
+                    tag_filter: {
+                        type: 'string',
+                        description: 'Only search projects with this tag',
+                    },
+                    limit: {
+                        type: 'number',
+                        description: 'Max results total (default: 50)',
+                    },
+                },
+                required: ['term'],
+            },
+        },
+        {
+            name: `${TOOL_PREFIX}global_refresh`,
+            description: `Refresh project statistics in the global ${PRODUCT_NAME} index. Updates file counts, method counts, etc. from each project's database. Removes projects whose paths no longer exist.`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    project: {
+                        type: 'string',
+                        description: 'Refresh only this project (name or path). Omit to refresh all.',
+                    },
+                    tag_filter: {
+                        type: 'string',
+                        description: 'Only refresh projects with this tag',
+                    },
+                },
+                required: [],
+            },
+        },
     ];
 }
 
@@ -638,6 +788,21 @@ export async function handleToolCall(
 
             case `${TOOL_PREFIX}windows`:
                 return handleWindows(args);
+
+            case `${TOOL_PREFIX}global_init`:
+                return await handleGlobalInit(args);
+
+            case `${TOOL_PREFIX}global_status`:
+                return handleGlobalStatus(args);
+
+            case `${TOOL_PREFIX}global_query`:
+                return handleGlobalQuery(args);
+
+            case `${TOOL_PREFIX}global_signatures`:
+                return handleGlobalSignatures(args);
+
+            case `${TOOL_PREFIX}global_refresh`:
+                return handleGlobalRefresh(args);
 
             default:
                 return {
@@ -1811,4 +1976,316 @@ function handleWindows(args: Record<string, unknown>): { content: Array<{ type: 
     return {
         content: [{ type: 'text', text: message.trimEnd() }],
     };
+}
+
+// ============================================================
+// Global Handlers
+// ============================================================
+
+/**
+ * Handle global init
+ */
+async function handleGlobalInit(args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const path = args.path as string;
+    if (!path) {
+        return {
+            content: [{ type: 'text', text: 'Error: path parameter is required' }],
+        };
+    }
+
+    const result = await globalInit({
+        path,
+        maxDepth: args.max_depth as number | undefined,
+        tags: args.tags as string | undefined,
+        exclude: args.exclude as string[] | undefined,
+        indexUnindexed: args.index_unindexed as boolean | undefined,
+        showProgress: args.show_progress as boolean | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    let message = `# Global Index Updated\n\n`;
+    message += `**Search path:** ${result.searchPath}\n\n`;
+    message += `- **Registered:** ${result.registered} projects\n`;
+    message += `- **New:** ${result.newProjects} projects\n`;
+    message += `- **Updated:** ${result.updatedProjects} projects\n`;
+    if (result.removedProjects > 0) {
+        message += `- **Removed:** ${result.removedProjects} projects (path no longer exists)\n`;
+    }
+
+    // Show bulk indexing results
+    if (result.indexedResults && result.indexedResults.length > 0) {
+        const successCount = result.indexedResults.filter(r => r.success).length;
+        const failCount = result.indexedResults.filter(r => !r.success).length;
+        message += `\n## Bulk Indexed: ${successCount} OK` + (failCount > 0 ? `, ${failCount} failed` : '') + `\n\n`;
+        for (const r of result.indexedResults) {
+            if (r.success) {
+                message += `- **${r.name}** — ${r.filesIndexed} files, ${r.methodsFound} methods\n`;
+            } else {
+                message += `- **${r.name}** — FAILED: ${r.error}\n`;
+            }
+        }
+    }
+
+    // Show large projects that need user decision
+    if (result.largeProjects && result.largeProjects.length > 0) {
+        message += `\n## Large Projects (${result.largeProjects.length}, >500 files estimated)\n\n`;
+        for (const proj of result.largeProjects) {
+            message += `- **${proj.name}** — \`${proj.path}\` (~${proj.estimatedFiles} files)\n`;
+        }
+        message += `\n**→ Ask the user** for each: index, skip, or permanently exclude its directory name?\n`;
+    }
+
+    // Show unindexed projects (only when NOT bulk indexing)
+    if (result.unindexedProjects.length > 0) {
+        const small = result.unindexedProjects.filter(p => p.estimatedFiles <= 500);
+        const large = result.unindexedProjects.filter(p => p.estimatedFiles > 500);
+
+        if (small.length > 0) {
+            message += `\n## Not Indexed (${small.length} projects, ≤500 files)\n\n`;
+            for (const proj of small) {
+                message += `- **${proj.name}** — \`${proj.path}\` (${proj.markers.join(', ')}, ~${proj.estimatedFiles} files)\n`;
+            }
+        }
+
+        if (large.length > 0) {
+            message += `\n## Large Projects (${large.length}, >500 files estimated)\n\n`;
+            for (const proj of large) {
+                message += `- **${proj.name}** — \`${proj.path}\` (~${proj.estimatedFiles} files)\n`;
+            }
+        }
+
+        message += `\n**→ Ask the user:** Should I index all ${small.length} smaller projects?`;
+        if (large.length > 0) {
+            message += ` Index the small ones FIRST, then come back and ask about the ${large.length} large one(s) — for each: index, skip, or permanently exclude its directory name?`;
+        }
+        message += `\n`;
+    }
+
+    message += `\n## Totals\n\n`;
+    message += `| | Count |\n|---|---|\n`;
+    message += `| Projects | ${result.totals.projects} |\n`;
+    message += `| Files | ${result.totals.files} |\n`;
+    message += `| Items | ${result.totals.items} |\n`;
+    message += `| Methods | ${result.totals.methods} |\n`;
+    message += `| Types | ${result.totals.types} |\n`;
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle global status
+ */
+function handleGlobalStatus(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const result = globalStatus({
+        tagFilter: args.tag_filter as string | undefined,
+        sort: args.sort as 'name' | 'size' | 'recent' | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.projects.length === 0) {
+        return {
+            content: [{ type: 'text', text: 'No projects registered in global index. Run aidex_global_init first.' }],
+        };
+    }
+
+    let message = `# Global ${PRODUCT_NAME} Index — ${result.projects.length} projects\n\n`;
+    message += `| Project | Files | Methods | Types | Languages | Last Indexed | Tags |\n`;
+    message += `|---------|-------|---------|-------|-----------|-------------|------|\n`;
+
+    for (const p of result.projects) {
+        const lastIndexed = p.lastIndexed ? formatRelativeTime(p.lastIndexed) : 'unknown';
+        const available = p.available ? '' : ' (unavailable)';
+        const tags = p.tags ?? '';
+        const langs = p.languages ?? '';
+        message += `| ${p.name}${available} | ${p.files} | ${p.methods} | ${p.types} | ${langs} | ${lastIndexed} | ${tags} |\n`;
+    }
+
+    message += `\n**Totals:** ${result.totals.projects} projects | ${result.totals.files} files | ${result.totals.methods} methods | ${result.totals.types} types\n`;
+    message += `**Database:** ${result.globalDbPath}`;
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle global query
+ */
+function handleGlobalQuery(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const term = args.term as string;
+    if (!term) {
+        return {
+            content: [{ type: 'text', text: 'Error: term parameter is required' }],
+        };
+    }
+
+    const result = globalQuery({
+        term,
+        mode: args.mode as 'exact' | 'contains' | 'starts_with' | undefined,
+        projectFilter: args.project_filter as string | undefined,
+        tagFilter: args.tag_filter as string | undefined,
+        typeFilter: args.type_filter as string[] | undefined,
+        limit: args.limit as number | undefined,
+        limitTotal: args.limit_total as number | undefined,
+        noCache: args.no_cache as boolean | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    if (result.totalMatches === 0) {
+        let msg = `No matches for "${result.term}" (mode: ${result.mode}) across ${result.projectsSearched} projects.`;
+        if (result.cached) msg += ' (cached)';
+        return {
+            content: [{ type: 'text', text: msg }],
+        };
+    }
+
+    let message = `# Global Search: "${result.term}" (${result.mode})\n\n`;
+    message += `Found **${result.totalMatches}** matches in **${result.projectResults.length}** projects`;
+    message += ` (searched ${result.projectsSearched})`;
+    if (result.cached) message += ' *(cached)*';
+    message += '\n';
+
+    for (const pr of result.projectResults) {
+        message += `\n## ${pr.project}\n`;
+        message += `\`${pr.projectPath}\`\n\n`;
+
+        for (const m of pr.matches) {
+            message += `- ${m.file}:${m.lineNumber} [${m.lineType}]\n`;
+        }
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle global signatures
+ */
+function handleGlobalSignatures(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const term = args.term as string;
+    if (!term) {
+        return {
+            content: [{ type: 'text', text: 'Error: term parameter is required' }],
+        };
+    }
+
+    const result = globalSignatures({
+        term,
+        kind: args.kind as SignatureKind | undefined,
+        projectFilter: args.project_filter as string | undefined,
+        tagFilter: args.tag_filter as string | undefined,
+        limit: args.limit as number | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    const totalResults = result.totalMethods + result.totalTypes;
+    if (totalResults === 0) {
+        return {
+            content: [{ type: 'text', text: `No methods or types matching "${result.term}" found across ${result.projectsSearched} projects.` }],
+        };
+    }
+
+    let message = `# Global Signatures: "${result.term}"`;
+    if (result.kind !== 'all') message += ` (kind: ${result.kind})`;
+    message += `\n\nFound **${result.totalMethods}** methods and **${result.totalTypes}** types across **${result.projectResults.length}** projects\n`;
+
+    for (const pr of result.projectResults) {
+        message += `\n## ${pr.project}\n`;
+        message += `\`${pr.projectPath}\`\n`;
+
+        if (pr.types.length > 0) {
+            message += `\n### Types\n`;
+            for (const t of pr.types) {
+                message += `- ${t.kind} **${t.name}** — ${t.file}:${t.lineNumber}\n`;
+            }
+        }
+
+        if (pr.methods.length > 0) {
+            message += `\n### Methods\n`;
+            for (const m of pr.methods) {
+                const mods: string[] = [];
+                if (m.visibility) mods.push(m.visibility);
+                if (m.isStatic) mods.push('static');
+                if (m.isAsync) mods.push('async');
+                const prefix = mods.length > 0 ? `[${mods.join(' ')}] ` : '';
+                message += `- ${prefix}${m.prototype} — ${m.file}:${m.lineNumber}\n`;
+            }
+        }
+    }
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Handle global refresh
+ */
+function handleGlobalRefresh(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const result = globalRefresh({
+        project: args.project as string | undefined,
+        tagFilter: args.tag_filter as string | undefined,
+    });
+
+    if (!result.success) {
+        return {
+            content: [{ type: 'text', text: `Error: ${result.error}` }],
+        };
+    }
+
+    let message = `# Global Index Refreshed\n\n`;
+    message += `- **Updated:** ${result.updated} projects\n`;
+
+    if (result.removed > 0) {
+        message += `- **Removed:** ${result.removed} projects (path no longer exists)\n`;
+        for (const path of result.removedPaths) {
+            message += `  - \`${path}\`\n`;
+        }
+    }
+
+    message += `\n## Totals\n\n`;
+    message += `${result.totals.projects} projects | ${result.totals.files} files | ${result.totals.methods} methods | ${result.totals.types} types`;
+
+    return {
+        content: [{ type: 'text', text: message.trimEnd() }],
+    };
+}
+
+/**
+ * Format a timestamp as relative time (e.g., "2 hours ago")
+ */
+function formatRelativeTime(timestamp: number): string {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return `${Math.floor(days / 7)}w ago`;
 }

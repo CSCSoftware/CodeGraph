@@ -32,6 +32,12 @@ Complete reference for all AiDex MCP tools.
 - [Task Management](#task-management)
   - [aidex_task](#aidex_task)
   - [aidex_tasks](#aidex_tasks)
+- [Global Search](#global-search)
+  - [aidex_global_init](#aidex_global_init)
+  - [aidex_global_status](#aidex_global_status)
+  - [aidex_global_query](#aidex_global_query)
+  - [aidex_global_signatures](#aidex_global_signatures)
+  - [aidex_global_refresh](#aidex_global_refresh)
 - [Screenshots](#screenshots)
   - [aidex_screenshot](#aidex_screenshot)
   - [aidex_windows](#aidex_windows)
@@ -568,29 +574,43 @@ Read or write session notes. Persists in the database between sessions.
 | `note` | string | - | Note to save. If omitted, reads current note |
 | `append` | boolean | - | Append to existing note instead of replacing (default: false) |
 | `clear` | boolean | - | Clear the note (default: false) |
+| `history` | boolean | - | Show archived note history, newest first (default: false) |
+| `search` | string | - | Search term to find in note history (case-insensitive) |
+| `limit` | number | - | Max history/search entries to return (default: 20) |
 
 **Operations:**
 
 | Parameters | Action |
 |------------|--------|
 | `{ path }` | Read current note |
-| `{ path, note: "..." }` | Write/replace note |
+| `{ path, note: "..." }` | Write/replace note (old note is archived) |
 | `{ path, note: "...", append: true }` | Append to note |
-| `{ path, clear: true }` | Delete note |
+| `{ path, clear: true }` | Delete note (old note is archived) |
+| `{ path, history: true }` | Browse archived notes |
+| `{ path, search: "term" }` | Search note history |
 
 **Examples:**
 ```json
 // Read note
 { "path": "." }
 
-// Write note
+// Write note (old note auto-archived)
 { "path": ".", "note": "Test glob fix after restart" }
 
 // Append to note
 { "path": ".", "note": "Also check edge cases", "append": true }
 
-// Clear note
+// Clear note (old note auto-archived)
 { "path": ".", "clear": true }
+
+// Browse note history
+{ "path": ".", "history": true }
+
+// Search past notes
+{ "path": ".", "search": "parser" }
+
+// Last 5 archived notes
+{ "path": ".", "history": true, "limit": 5 }
 ```
 
 ---
@@ -723,6 +743,119 @@ List and filter tasks in the project backlog. Returns tasks grouped by status an
 
 ---
 
+## Global Search
+
+Search across ALL indexed projects at once. Uses a global database (`~/.aidex/global.db`) that references each project's own `.aidex/index.db`. Queries use SQLite `ATTACH DATABASE` — no data copying, each project DB is the single source of truth.
+
+### aidex_global_init
+
+Scan a directory tree for AiDex-indexed projects and register them in the global database. Also detects unindexed projects by looking for project markers (`.csproj`, `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, `CMakeLists.txt`, etc.).
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `path` | string | Yes | Root directory to scan (e.g., `"Q:/develop"`) |
+| `max_depth` | number | No | Maximum directory depth to scan (default: 10) |
+| `tags` | string | No | Comma-separated tags for all found projects (e.g., `"privat,libs"`) |
+| `exclude` | string[] | No | Directory names or absolute paths to exclude (e.g., `["llama.cpp", "Q:/develop/external"]`) |
+| `index_unindexed` | boolean | No | Auto-index all unindexed projects with ≤500 estimated code files. Large projects (>500 files) are listed separately for user decision |
+| `show_progress` | boolean | No | Open a browser window (`http://localhost:3334`) showing live indexing progress. Only effective with `index_unindexed: true` |
+
+**Examples:**
+```json
+// Scan and register existing indexes
+{ "path": "Q:/develop", "exclude": ["llama.cpp", "node_modules"] }
+
+// Scan, register, AND auto-index all unindexed projects with progress UI
+{ "path": "Q:/develop", "index_unindexed": true, "show_progress": true }
+```
+
+**Returns:** Count of registered/new/updated/removed projects, list of unindexed projects with their markers, totals across all registered projects. When `index_unindexed` is true, also returns `indexedResults` (per-project success/failure) and `largeProjects` (projects >500 files needing user decision).
+
+---
+
+### aidex_global_status
+
+Show overview of all projects registered in the global index.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `tag_filter` | string | No | Only show projects with this tag |
+| `sort` | string | No | Sort order: `"name"` (default), `"size"` (most files first), `"recent"` (most recently indexed first) |
+
+**Example:**
+```json
+{ "sort": "recent" }
+```
+
+**Returns:** Table of all registered projects with name, path, languages, file/method/type counts, and last indexed time.
+
+---
+
+### aidex_global_query
+
+Search for a term across all registered projects. Results are cached in memory for 5 minutes.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `term` | string | Yes | Term to search for |
+| `mode` | string | No | `"exact"` (default), `"contains"`, or `"starts_with"` |
+| `tag_filter` | string | No | Only search projects with this tag |
+
+**Example:**
+```json
+{ "term": "TransparentWindow", "mode": "contains" }
+```
+
+**Returns:** Matches grouped by project, showing file paths and line numbers.
+
+---
+
+### aidex_global_signatures
+
+Search for methods or types by name across all registered projects.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `name` | string | Yes | Method or type name to search for |
+| `kind` | string | No | Filter by kind: `"method"`, `"class"`, `"struct"`, `"interface"`, `"enum"`, `"type"` |
+| `tag_filter` | string | No | Only search projects with this tag |
+
+**Example:**
+```json
+{ "name": "Render", "kind": "method" }
+```
+
+**Returns:** Matching methods (with prototype, visibility, file, line) and types (with kind, file, line), grouped by project.
+
+---
+
+### aidex_global_refresh
+
+Update statistics for all registered projects and remove projects whose paths no longer exist.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `tag_filter` | string | No | Only refresh projects with this tag |
+
+**Example:**
+```json
+{}
+```
+
+**Returns:** Count of updated and removed projects, plus updated totals.
+
+---
+
 ## Screenshots
 
 ### aidex_screenshot
@@ -733,8 +866,12 @@ Take a screenshot of the screen, a window, or an interactive region selection. R
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `mode` | string | - | `fullscreen` (default), `active_window`, `window`, `region` |
+| `mode` | string | - | `fullscreen` (default), `active_window`, `window`, `region`, `rect` |
 | `window_title` | string | for mode=window | Window title substring to match (use `aidex_windows` to find titles) |
+| `x` | number | for mode=rect | X coordinate of the capture rectangle |
+| `y` | number | for mode=rect | Y coordinate of the capture rectangle |
+| `width` | number | for mode=rect | Width of the capture rectangle in pixels |
+| `height` | number | for mode=rect | Height of the capture rectangle in pixels |
 | `monitor` | number | - | Monitor index (0-based, default: primary). Only for fullscreen mode |
 | `delay` | number | - | Seconds to wait before capturing (e.g., `3` to switch windows first) |
 | `filename` | string | - | Custom filename (default: `aidex-screenshot.png`). Overwrites if exists |
@@ -748,6 +885,7 @@ Take a screenshot of the screen, a window, or an interactive region selection. R
 | `active_window` | Currently focused window | Win32 API / screencapture / xdotool+maim |
 | `window` | Specific window by title substring | EnumWindows / osascript / xdotool |
 | `region` | User draws a rectangle interactively | WinForms overlay / screencapture -i / maim -s |
+| `rect` | Capture specific coordinates (x, y, width, height) | PowerShell / screencapture / maim |
 
 **Returns:**
 - `file_path`: Absolute path to the saved PNG file
@@ -768,6 +906,9 @@ Take a screenshot of the screen, a window, or an interactive region selection. R
 
 // Interactive region selection
 { "mode": "region" }
+
+// Capture specific coordinates (e.g., from accessibility bounds)
+{ "mode": "rect", "x": 100, "y": 200, "width": 800, "height": 600 }
 
 // Fullscreen with delay and custom path
 { "delay": 3, "filename": "bug-report.png", "save_path": "/tmp/screenshots" }

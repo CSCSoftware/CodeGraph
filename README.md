@@ -91,9 +91,10 @@ The index lives in `.aidex/index.db` (SQLite) - fast, portable, no external depe
 - **Project Summary**: Auto-detected entry points, main classes, language breakdown
 - **Incremental Updates**: Re-index single files after changes
 - **Cross-Project Links**: Query across multiple related projects
+- **Global Search**: Search across ALL indexed projects at once - "Have I ever written X?"
 - **Time-based Filtering**: Find what changed in the last hour, day, or week
 - **Project Structure**: Query all files (code, config, docs, assets) without filesystem access
-- **Session Notes**: Leave reminders for the next session - persists in the database
+- **Session Notes**: Leave reminders for the next session - persists in the database, with searchable history
 - **Task Backlog**: Built-in task management that lives with your code index - no external tools needed
 - **Auto-Cleanup**: Excluded files (e.g., build outputs) are automatically removed from index
 
@@ -232,6 +233,11 @@ aidex_init({ path: "/path/to/your/project" })
 | `aidex_tasks` | List and filter tasks by status, priority, or tag |
 | `aidex_screenshot` | Take a screenshot (fullscreen, window, region) |
 | `aidex_windows` | List open windows for screenshot targeting |
+| `aidex_global_init` | Scan directory tree, register all indexed projects in global DB |
+| `aidex_global_status` | List all registered projects with stats |
+| `aidex_global_query` | Search terms across ALL registered projects |
+| `aidex_global_signatures` | Search methods/types by name across all projects |
+| `aidex_global_refresh` | Update stats and remove stale projects from global DB |
 
 ## Time-based Filtering
 
@@ -275,10 +281,19 @@ aidex_note({ path: "." })                                              # Read
 aidex_note({ path: ".", clear: true })                                 # Clear
 ```
 
+**Note History** (v1.10): Old notes are automatically archived when overwritten or cleared. Browse and search past notes:
+
+```
+aidex_note({ path: ".", history: true })                    # Browse archived notes
+aidex_note({ path: ".", search: "parser" })                 # Search note history
+aidex_note({ path: ".", history: true, limit: 5 })          # Last 5 archived notes
+```
+
 **Use cases:**
 - Before ending a session: *"Remember to test X next time"*
 - AI auto-reminder: Save what to verify after a restart
 - Handover notes: Context for the next session without editing config files
+- Search past sessions: *"What did we do about the parser?"*
 
 Notes are stored in the SQLite database (`.aidex/index.db`) and persist indefinitely.
 
@@ -303,6 +318,47 @@ aidex_tasks({ path: ".", status: "active" })
 
 Your AI assistant can create tasks while working (*"found a bug in the parser, add it to the backlog"*), track progress, and pick up where you left off next session.
 
+## Global Search
+
+Search across ALL your indexed projects at once. Perfect for *"Have I ever written a transparent window?"* or *"Where did I use that algorithm?"*
+
+### Setup
+
+```
+aidex_global_init({ path: "Q:/develop" })                              # Scan & register
+aidex_global_init({ path: "Q:/develop", exclude: ["llama.cpp"] })      # Skip external repos
+aidex_global_init({ path: "Q:/develop", index_unindexed: true })       # Auto-index all found projects
+aidex_global_init({ path: "Q:/develop", index_unindexed: true, show_progress: true })  # With browser progress UI
+```
+
+This scans your project directory, registers all AiDex-indexed projects in a global database (`~/.aidex/global.db`), and reports any unindexed projects it finds by detecting project markers (`.csproj`, `package.json`, `Cargo.toml`, etc.).
+
+With `index_unindexed: true`, it also auto-indexes all discovered projects with ≤500 code files. Larger projects are listed separately for user decision. Add `show_progress: true` to open a live progress UI in your browser (`http://localhost:3334`).
+
+### Search
+
+```
+aidex_global_query({ term: "TransparentWindow" })                      # Exact match
+aidex_global_query({ term: "transparent", mode: "contains" })          # Fuzzy search
+aidex_global_signatures({ name: "Render", kind: "method" })            # Find methods
+aidex_global_signatures({ name: "Player", kind: "class" })             # Find classes
+```
+
+### How it works
+
+- Uses SQLite `ATTACH DATABASE` to query project databases directly — no data copying
+- Results are cached in memory (5-minute TTL) for fast repeated queries
+- Projects are batched (8 at a time) to respect SQLite's attachment limit
+- Each project keeps its own `.aidex/index.db` as the single source of truth
+
+### Management
+
+```
+aidex_global_status()                                                  # List all projects
+aidex_global_status({ sort: "recent" })                                # Most recently indexed first
+aidex_global_refresh()                                                 # Update stats, remove stale
+```
+
 ## Screenshots
 
 Take cross-platform screenshots directly from your AI assistant - no manual file paths needed:
@@ -312,11 +368,12 @@ aidex_screenshot()                                           # Full screen
 aidex_screenshot({ mode: "active_window" })                  # Active window
 aidex_screenshot({ mode: "window", window_title: "VS Code" }) # Specific window
 aidex_screenshot({ mode: "region" })                         # Interactive selection
+aidex_screenshot({ mode: "rect", x: 100, y: 200, width: 800, height: 600 })  # Coordinates
 aidex_windows({ filter: "chrome" })                          # Find window titles
 ```
 
 **Features:**
-- **4 capture modes**: Fullscreen, active window, specific window (by title), interactive region selection
+- **5 capture modes**: Fullscreen, active window, specific window (by title), interactive region selection, coordinate-based rectangle
 - **Cross-platform**: Windows (PowerShell), macOS (screencapture), Linux (maim/scrot)
 - **Multi-monitor**: Select which monitor to capture
 - **Delay**: Wait N seconds before capturing (e.g., to open a menu first)

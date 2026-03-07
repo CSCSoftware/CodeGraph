@@ -75,6 +75,9 @@ export const DEFAULT_EXCLUDE = [
     '**/.venv/**',           // Python virtual env
     '**/env/**',             // Python virtual env
     '**/*.egg-info/**',      // Python package metadata
+    '**/site-packages/**',   // Python installed packages
+    '**/Lib/**',             // Embedded Python standard library
+    '**/fdk-aac/**',         // Fraunhofer AAC codec (external)
     // IDE/Editor
     '**/.git/**',
     '**/.vs/**',
@@ -103,7 +106,7 @@ export function readGitignore(projectPath: string): string[] {
     return content
         .split('\n')
         .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#'))  // Keine Kommentare/Leerzeilen
+        .filter(line => line && !line.startsWith('#') && !line.startsWith('!'))  // Skip comments, empty lines, and negation patterns
         .map(pattern => {
             // Glob-kompatibel machen
             if (pattern.endsWith('/')) {
@@ -352,6 +355,14 @@ export async function init(params: InitParams): Promise<InitResult> {
 
     db.close();
 
+    // Update global registry if it exists
+    tryUpdateGlobalRegistry(params.path, {
+        files: filesIndexed,
+        items: totalItems,
+        methods: totalMethods,
+        types: totalTypes,
+    });
+
     return {
         success: true,
         indexPath: indexDir,
@@ -506,4 +517,27 @@ function indexFile(
         methods: extraction.methods.length,
         types: extraction.types.length,
     };
+}
+
+// ============================================================
+// Global registry integration
+// ============================================================
+
+/**
+ * Update global registry after init/update. Fire-and-forget — errors are silently ignored.
+ */
+function tryUpdateGlobalRegistry(projectPath: string, counts: { files: number; items: number; methods: number; types: number }): void {
+    try {
+        const { globalDbExists, readProjectStats, openGlobalDatabase } = require('../db/global-database.js');
+        if (!globalDbExists()) return;
+
+        const stats = readProjectStats(projectPath);
+        if (!stats) return;
+
+        const globalDb = openGlobalDatabase();
+        globalDb.registerProject(projectPath, basename(projectPath), stats);
+        globalDb.close();
+    } catch {
+        // Silently ignore — global registry is optional
+    }
 }

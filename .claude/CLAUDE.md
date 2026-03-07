@@ -2,7 +2,7 @@
 
 MCP Server für persistentes Code-Indexing. Ermöglicht Claude Code schnelle, präzise Suchen statt Grep/Glob.
 
-**Version:** 1.9.0 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/AiDex
+**Version:** 1.11.0 | **Sprachen:** 11 | **Repo:** https://github.com/CSCSoftware/AiDex
 
 ## Build & Run
 
@@ -36,7 +36,7 @@ Registriert als MCP Server `aidex` (Prefix: `mcp__aidex__aidex_*`).
 **Nach Änderungen:** Build ausführen, dann Claude Code neu starten.
 **MCP-Name:** Server muss als `"aidex"` registriert sein → Prefix wird `mcp__aidex__aidex_*`.
 
-## Tools (22)
+## Tools (27)
 
 ### Suche & Index
 | Tool | Beschreibung |
@@ -88,6 +88,15 @@ Status: `backlog → active → done | cancelled`
 | `aidex_screenshot` | Screenshot aufnehmen (fullscreen/active_window/window/region) |
 | `aidex_windows` | Offene Fenster auflisten (Helper für window-Modus) |
 
+### Global Search (v1.11+)
+| Tool | Beschreibung |
+|------|--------------|
+| `aidex_global_init` | Verzeichnisbaum scannen, Projekte in `~/.aidex/global.db` registrieren. `index_unindexed`: Auto-Index ≤500 Dateien. `show_progress`: Browser Progress-UI |
+| `aidex_global_status` | Alle registrierten Projekte mit Stats anzeigen |
+| `aidex_global_query` | Terme über ALLE Projekte suchen (ATTACH DATABASE, 5-Min Cache) |
+| `aidex_global_signatures` | Methoden/Typen nach Name über alle Projekte suchen |
+| `aidex_global_refresh` | Stats aktualisieren, veraltete Projekte entfernen |
+
 ## Sprachen
 
 C# · TypeScript · JavaScript · Rust · Python · C · C++ · Java · Go · PHP · Ruby
@@ -105,11 +114,20 @@ src/
 │   ├── summary.ts, link.ts, scan.ts, files.ts
 │   ├── session.ts, note.ts, task.ts
 │   ├── screenshot/              # Plattform-Screenshots
-│   └── viewer/server.ts
+│   └── global/                  # Global Search (v1.11)
+│       ├── global-init.ts       # Scan + Bulk-Index
+│       ├── global-query.ts      # ATTACH DATABASE Queries
+│       ├── global-signatures.ts # Methoden/Typen suchen
+│       ├── global-status.ts     # Projekt-Übersicht
+│       └── global-refresh.ts    # Stats aktualisieren
+├── viewer/
+│   ├── server.ts         # Interactive Viewer (Port 3333)
+│   └── progress.ts       # SSE Progress UI (Port 3334)
 ├── db/
 │   ├── database.ts       # SQLite (WAL)
 │   ├── queries.ts        # Prepared Statements
-│   └── schema.sql
+│   ├── schema.sql        # Projekt-DB Schema
+│   └── global-database.ts # ~/.aidex/global.db
 └── parser/
     ├── tree-sitter.ts    # Parser (1MB Buffer)
     ├── extractor.ts      # Identifier + Signaturen
@@ -189,6 +207,21 @@ aidex_windows({ filter: "chrome" })                            # Fenster finden
 - Default: Speichert in `os.tmpdir()/aidex-screenshot.png` (überschreibt immer)
 - Optional: `filename` und `save_path` für andere Pfade
 - Rückgabe: Dateipfad → Claude kann sofort `Read` aufrufen
+
+### Global Search (v1.11)
+```
+aidex_global_init({ path: "Q:/develop" })                              # Nur registrieren
+aidex_global_init({ path: "Q:/develop", index_unindexed: true, show_progress: true })  # Alles indexieren + Progress-UI
+aidex_global_query({ term: "TransparentWindow", mode: "contains" })    # Über alle Projekte suchen
+aidex_global_signatures({ term: "Render", kind: "method" })            # Methoden über alle Projekte
+aidex_global_status({ sort: "recent" })                                # Projektliste
+aidex_global_refresh()                                                 # Stats updaten
+```
+- `~/.aidex/global.db` referenziert alle Projekt-DBs
+- SQLite ATTACH DATABASE — kein Daten-Kopieren
+- Session-Cache (5-Min TTL) für schnelle wiederholte Queries
+- Bulk-Index: ≤500 Code-Dateien automatisch, >500 werden dem User gezeigt
+- Progress-UI: SSE-basiert auf Port 3334 mit Browser-Auto-Open
 
 ### Auto-Cleanup (v1.3.1)
 `aidex_init` entfernt automatisch Dateien die jetzt excluded sind (z.B. build/).
