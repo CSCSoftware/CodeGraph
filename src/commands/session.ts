@@ -71,9 +71,9 @@ const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 // ============================================================
 
 const RELEASE_HIGHLIGHTS: string[] = [
-    'Auto-setup on install — no more manual "aidex setup" needed',
-    'Comprehensive AI instructions for all 27 tools (decision tree, search modes, examples)',
-    'Code refactoring: shared utilities, DB transaction fixes, SQL injection fix',
+    'Screenshot optimization: new `scale` and `colors` parameters reduce file size up to 95%',
+    'LLM-optimized: scale=0.5 + colors=2 turns a 100 KB screenshot into ~5 KB (black & white, half size)',
+    'AI strategy: tool description guides assistants to start aggressive, retry if unreadable, remember per app',
 ];
 
 // ============================================================

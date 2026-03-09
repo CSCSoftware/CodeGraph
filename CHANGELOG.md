@@ -2,6 +2,16 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [1.13.0] - 2026-03-09
+
+### Added
+- **Screenshot optimization**: New `scale` (0.1-1.0) and `colors` (2/4/16/256) parameters for `aidex_screenshot`
+  - Reduces file size up to 95% (e.g., 108 KB → 5 KB with `scale: 0.5, colors: 2`)
+  - Black & white mode (`colors: 2`) ideal for text-only screenshots — saves thousands of tokens
+  - Cross-platform post-processing: Windows (System.Drawing), macOS (sips + ImageMagick), Linux (ImageMagick)
+  - Size reporting: shows original → optimized size and percentage saved
+- **LLM auto-optimization strategy**: Tool description guides AI assistants to start with aggressive settings, retry if unreadable, and remember working settings per app during the session
+
 ## [1.12.1] - 2026-03-07
 
 ### Added
