@@ -163,9 +163,17 @@ aidex_global_status({ sort: "recent" })                                # List al
 aidex_screenshot()                                             # Full screen
 aidex_screenshot({ mode: "active_window" })                    # Active window
 aidex_screenshot({ mode: "window", window_title: "VS Code" }) # Specific window
+aidex_screenshot({ scale: 0.5, colors: 2 })                   # B&W, half size (ideal for LLM)
+aidex_screenshot({ colors: 16 })                               # 16 colors (UI readable)
 aidex_windows({ filter: "chrome" })                            # Find window titles
 \`\`\`
 No index needed. Returns file path → use \`Read\` to view immediately.
+
+**LLM optimization strategy:** Always start with aggressive settings, then retry if unreadable:
+1. First try: \`scale: 0.5, colors: 2\` (B&W, half size — smallest possible)
+2. If unreadable: retry with \`colors: 16\` (adds shading for UI elements)
+3. If still unclear: \`scale: 0.75\` or omit \`colors\` for full quality
+4. **Remember** what works for each window/app during the session — don't retry every time.
 ${CLAUDE_MD_END}`;
 
 // ============================================================

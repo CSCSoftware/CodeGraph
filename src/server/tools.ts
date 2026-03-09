@@ -5,7 +5,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, screenshot, listWindows, globalInit, globalStatus, globalQuery, globalSignatures, globalRefresh, type QueryMode, type TaskAction, type ScreenshotMode, type SignatureKind } from '../commands/index.js';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, screenshot, listWindows, globalInit, globalStatus, globalQuery, globalSignatures, globalRefresh, type QueryMode, type TaskAction, type ScreenshotMode, type ScreenshotColors, type SignatureKind } from '../commands/index.js';
 import type { TaskRow } from '../db/index.js';
 import { openDatabase } from '../db/index.js';
 import { startViewer, stopViewer } from '../viewer/index.js';
@@ -498,7 +498,7 @@ export function registerTools(): Tool[] {
         },
         {
             name: `${TOOL_PREFIX}screenshot`,
-            description: 'Take a screenshot of the screen, active window, a specific window, an interactive region selection, or a specific rectangle by coordinates. Returns the file path so you can immediately Read the image. No project index required.',
+            description: 'Take a screenshot. Returns file path for Read. No index required. OPTIMIZATION STRATEGY: Always start with scale=0.5 + colors=2 (smallest). If text is unreadable, retry with colors=16. If still unclear, try scale=0.75 or omit colors for full quality. Remember what works for each window/app during the session to avoid retries.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -542,6 +542,15 @@ export function registerTools(): Tool[] {
                     height: {
                         type: 'number',
                         description: 'Height of the capture rectangle in pixels (required when mode="rect")',
+                    },
+                    scale: {
+                        type: 'number',
+                        description: 'Scale factor 0.1-1.0 (e.g., 0.5 = half size). Reduces resolution to save tokens. Default: no scaling.',
+                    },
+                    colors: {
+                        type: 'number',
+                        enum: [2, 4, 16, 256],
+                        description: 'Reduce color palette: 2 (B&W, ideal for text), 4 (text + light shading), 16 (UI readable), 256 (good quality). Default: full color. Tip: Use 2 for text-only screenshots to dramatically reduce file size.',
                     },
                 },
                 required: [],
@@ -1932,6 +1941,8 @@ function handleScreenshot(args: Record<string, unknown>): { content: Array<{ typ
         y: args.y as number | undefined,
         width: args.width as number | undefined,
         height: args.height as number | undefined,
+        scale: args.scale as number | undefined,
+        colors: args.colors as ScreenshotColors | undefined,
     });
 
     if (!result.success) {
@@ -1946,10 +1957,30 @@ function handleScreenshot(args: Record<string, unknown>): { content: Array<{ typ
     if (result.monitor !== undefined) {
         message += `**Monitor:** ${result.monitor}\n`;
     }
+    if (result.scale !== undefined) {
+        message += `**Scale:** ${Math.round(result.scale * 100)}%\n`;
+    }
+    if (result.colors !== undefined) {
+        message += `**Colors:** ${result.colors}\n`;
+    }
+    if (result.original_size !== undefined && result.optimized_size !== undefined) {
+        const saved = result.original_size - result.optimized_size;
+        const pct = result.original_size > 0 ? Math.round((saved / result.original_size) * 100) : 0;
+        message += `**Size:** ${formatBytes(result.original_size)} → ${formatBytes(result.optimized_size)} (${pct}% saved)\n`;
+    }
+    if (result.error) {
+        message += `\n⚠️ ${result.error}\n`;
+    }
 
     return {
         content: [{ type: 'text', text: message.trimEnd() }],
     };
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**

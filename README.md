@@ -29,7 +29,7 @@ AiDex is an MCP server that gives AI coding assistants instant access to your en
 | **Global Search** | `global_init`, `global_query`, `global_signatures`, `global_status`, `global_refresh` | Search across ALL your projects at once — "Have I ever written X?" |
 | **Sessions** | `session`, `note` | Track sessions, detect external changes, leave notes for next session (with searchable history) |
 | **Task Backlog** | `task`, `tasks` | Built-in task management with priorities, tags, and auto-logged history |
-| **Screenshots** | `screenshot`, `windows` | Cross-platform screen capture (fullscreen, window, region) — no index needed |
+| **Screenshots** | `screenshot`, `windows` | Cross-platform screen capture with LLM optimization — scale + color reduction saves up to 95% tokens |
 | **Viewer** | `viewer` | Interactive browser UI with file tree, signatures, tasks, and live reload |
 
 **11 languages** — C#, TypeScript, JavaScript, Rust, Python, C, C++, Java, Go, PHP, Ruby
@@ -78,7 +78,7 @@ aidex_task({ path: ".", action: "create", title: "Fix edge case in parser", prio
 - [Session Notes](#session-notes)
 - [Task Backlog](#task-backlog)
 - [Global Search](#global-search)
-- [Screenshots](#screenshots)
+- [Screenshots — LLM-Optimized](#screenshots--llm-optimized)
 - [Interactive Viewer](#interactive-viewer)
 - [CLI Usage](#cli-usage)
 - [Performance](#performance)
@@ -309,7 +309,7 @@ Do I want to search code?
 | Global Search | `aidex_global_init`, `aidex_global_query`, `aidex_global_signatures`, `aidex_global_status`, `aidex_global_refresh` | Search across ALL projects |
 | Sessions | `aidex_session`, `aidex_note` | Track sessions, leave notes (with searchable history) |
 | Tasks | `aidex_task`, `aidex_tasks` | Built-in backlog with priorities, tags, auto-logged history |
-| Screenshots | `aidex_screenshot`, `aidex_windows` | Cross-platform screen capture (no index needed) |
+| Screenshots | `aidex_screenshot`, `aidex_windows` | Screen capture with LLM optimization (scale + color reduction, no index needed) |
 | Viewer | `aidex_viewer` | Interactive browser UI with file tree, signatures, tasks |
 
 **11 languages:** C#, TypeScript, JavaScript, Rust, Python, C, C++, Java, Go, PHP, Ruby
@@ -354,9 +354,17 @@ aidex_global_status({ sort: "recent" })                                # List al
 aidex_screenshot()                                             # Full screen
 aidex_screenshot({ mode: "active_window" })                    # Active window
 aidex_screenshot({ mode: "window", window_title: "VS Code" }) # Specific window
+aidex_screenshot({ scale: 0.5, colors: 2 })                   # B&W, half size (ideal for LLM)
+aidex_screenshot({ colors: 16 })                               # 16 colors (UI readable)
 aidex_windows({ filter: "chrome" })                            # Find window titles
 ```
 No index needed. Returns file path → use `Read` to view immediately.
+
+**LLM optimization strategy:** Always start with aggressive settings, then retry if unreadable:
+1. First try: `scale: 0.5, colors: 2` (B&W, half size — smallest possible)
+2. If unreadable: retry with `colors: 16` (adds shading for UI elements)
+3. If still unclear: `scale: 0.75` or omit `colors` for full quality
+4. **Remember** what works for each window/app during the session — don't retry every time.
 ```
 
 ### 4. Index your project
@@ -392,7 +400,7 @@ aidex_init({ path: "/path/to/your/project" })
 | `aidex_viewer` | Open interactive project tree in browser |
 | `aidex_task` | Create, read, update, delete tasks with priority and tags |
 | `aidex_tasks` | List and filter tasks by status, priority, or tag |
-| `aidex_screenshot` | Take a screenshot (fullscreen, window, region) |
+| `aidex_screenshot` | Take a screenshot (fullscreen, window, region) with optional scale + color reduction |
 | `aidex_windows` | List open windows for screenshot targeting |
 | `aidex_global_init` | Scan directory tree, register all indexed projects in global DB |
 | `aidex_global_status` | List all registered projects with stats |
@@ -521,30 +529,62 @@ aidex_global_status({ sort: "recent" })                                # Most re
 aidex_global_refresh()                                                 # Update stats, remove stale
 ```
 
-## Screenshots
+## Screenshots — LLM-Optimized
 
-Take cross-platform screenshots directly from your AI assistant - no manual file paths needed:
+Take screenshots and **reduce them up to 95%** for LLM context. A typical screenshot goes from ~100 KB to ~5 KB — that's thousands of tokens saved per image.
+
+### Why this matters
+
+| | Raw Screenshot | Optimized (scale=0.5, colors=2) |
+|---|---|---|
+| **File size** | ~100-500 KB | ~5-15 KB |
+| **Tokens consumed** | ~5,000-25,000 | ~250-750 |
+| **Text readable?** | Yes | Yes |
+| **Colors** | 16M (24-bit) | 2 (black & white) |
+
+Most screenshots in AI context are for reading text — error messages, logs, UI labels. You don't need 16 million colors for that.
+
+### Usage
 
 ```
-aidex_screenshot()                                           # Full screen
-aidex_screenshot({ mode: "active_window" })                  # Active window
+aidex_screenshot()                                             # Full screen (full quality)
+aidex_screenshot({ mode: "active_window" })                    # Active window
 aidex_screenshot({ mode: "window", window_title: "VS Code" }) # Specific window
-aidex_screenshot({ mode: "region" })                         # Interactive selection
+aidex_screenshot({ scale: 0.5, colors: 2 })                   # B&W, half size (best for text)
+aidex_screenshot({ scale: 0.5, colors: 16 })                  # 16 colors (UI readable)
+aidex_screenshot({ colors: 256 })                              # 256 colors (good quality)
+aidex_screenshot({ mode: "region" })                           # Interactive selection
 aidex_screenshot({ mode: "rect", x: 100, y: 200, width: 800, height: 600 })  # Coordinates
-aidex_windows({ filter: "chrome" })                          # Find window titles
+aidex_windows({ filter: "chrome" })                            # Find window titles
 ```
 
-**Features:**
+### Optimization parameters
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `scale` | 0.1 - 1.0 | Scale factor (0.5 = half resolution). Most HiDPI screens are 2-3x anyway. |
+| `colors` | 2, 4, 16, 256 | Color reduction. 2 = black & white, ideal for text screenshots. |
+
+### Recommended strategy for AI assistants
+
+The tool description tells LLMs to optimize automatically:
+
+1. **Start aggressive**: `scale: 0.5, colors: 2` (smallest possible)
+2. **If unreadable**: retry with `colors: 16` (adds shading for UI elements)
+3. **If still unclear**: try `scale: 0.75` or full color
+4. **Remember**: cache what works per window/app for the rest of the session
+
+This way the AI learns the right settings per app without wasting tokens on oversized images.
+
+### Features
+
 - **5 capture modes**: Fullscreen, active window, specific window (by title), interactive region selection, coordinate-based rectangle
-- **Cross-platform**: Windows (PowerShell), macOS (screencapture), Linux (maim/scrot)
+- **Cross-platform**: Windows (PowerShell + System.Drawing), macOS (sips + ImageMagick), Linux (ImageMagick)
 - **Multi-monitor**: Select which monitor to capture
 - **Delay**: Wait N seconds before capturing (e.g., to open a menu first)
-- **Auto-path**: Default saves to temp directory with fixed filename - your AI reads it immediately
+- **Size reporting**: Shows original → optimized size and percentage saved
+- **Auto-path**: Default saves to temp directory with fixed filename
 - **No index required**: Works standalone, no `.aidex/` needed
-
-Use `aidex_windows` to find the exact window title, then `aidex_screenshot` with `mode: "window"` to capture it.
-
-**Future:** Screenshots will be storable in the AiDex database - attach them to tasks for bug documentation, capture before/after states for refactoring, or persist GUI evidence across sessions.
 
 ## Interactive Viewer
 

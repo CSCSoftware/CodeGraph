@@ -10,6 +10,8 @@
 
 export type ScreenshotMode = 'fullscreen' | 'active_window' | 'window' | 'region' | 'rect';
 
+export type ScreenshotColors = 2 | 4 | 16 | 256;
+
 export interface ScreenshotParams {
     mode?: ScreenshotMode;
     window_title?: string;
@@ -21,6 +23,8 @@ export interface ScreenshotParams {
     y?: number;
     width?: number;
     height?: number;
+    scale?: number;
+    colors?: ScreenshotColors;
 }
 
 export interface ScreenshotResult {
@@ -28,6 +32,10 @@ export interface ScreenshotResult {
     file_path: string;
     mode: ScreenshotMode;
     monitor?: number;
+    scale?: number;
+    colors?: ScreenshotColors;
+    original_size?: number;
+    optimized_size?: number;
     error?: string;
 }
 

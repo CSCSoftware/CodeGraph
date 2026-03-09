@@ -18,6 +18,7 @@ import type { ScreenshotParams, ScreenshotResult, PlatformScreenshot } from './t
 import { win32Platform } from './platform-win32.js';
 import { darwinPlatform } from './platform-darwin.js';
 import { linuxPlatform } from './platform-linux.js';
+import { postProcess } from './post-process.js';
 
 // ============================================================
 // Constants
@@ -86,6 +87,27 @@ export function screenshot(params: ScreenshotParams): ScreenshotResult {
         }
     }
 
+    // Validate scale
+    if (params.scale !== undefined && (params.scale < 0.1 || params.scale > 1.0)) {
+        return {
+            success: false,
+            file_path: '',
+            mode,
+            error: 'scale must be between 0.1 and 1.0',
+        };
+    }
+
+    // Validate colors
+    const validColors = [2, 4, 16, 256];
+    if (params.colors !== undefined && !validColors.includes(params.colors)) {
+        return {
+            success: false,
+            file_path: '',
+            mode,
+            error: `colors must be one of: ${validColors.join(', ')}`,
+        };
+    }
+
     // Resolve file path
     const dir = params.save_path ?? tmpdir();
     const filename = params.filename ?? DEFAULT_FILENAME;
@@ -132,11 +154,40 @@ export function screenshot(params: ScreenshotParams): ScreenshotResult {
             };
         }
 
+        // Post-process: scale and/or color reduction
+        const needsPostProcess = (params.scale !== undefined && params.scale < 1.0) || params.colors !== undefined;
+        let original_size: number | undefined;
+        let optimized_size: number | undefined;
+
+        if (needsPostProcess) {
+            try {
+                const ppResult = postProcess(filePath, {
+                    scale: params.scale,
+                    colors: params.colors,
+                });
+                original_size = ppResult.original_size;
+                optimized_size = ppResult.optimized_size;
+            } catch (ppError) {
+                // Post-processing failed — return the unmodified screenshot with a warning
+                return {
+                    success: true,
+                    file_path: filePath,
+                    mode,
+                    monitor: params.monitor,
+                    error: `Screenshot captured but post-processing failed: ${ppError instanceof Error ? ppError.message : String(ppError)}`,
+                };
+            }
+        }
+
         return {
             success: true,
             file_path: filePath,
             mode,
             monitor: params.monitor,
+            scale: params.scale,
+            colors: params.colors,
+            original_size,
+            optimized_size,
         };
     } catch (error) {
         return {

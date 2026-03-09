@@ -8,6 +8,7 @@ export type {
     ScreenshotParams,
     ScreenshotResult,
     ScreenshotMode,
+    ScreenshotColors,
     WindowsParams,
     WindowsResult,
     WindowInfo,

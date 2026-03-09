@@ -82,10 +82,10 @@ Registriert als MCP Server `aidex` (Prefix: `mcp__aidex__aidex_*`).
 
 Status: `backlog → active → done | cancelled`
 
-### Screenshots (v1.9+)
+### Screenshots (v1.9+, Optimierung v1.13)
 | Tool | Beschreibung |
 |------|--------------|
-| `aidex_screenshot` | Screenshot aufnehmen (fullscreen/active_window/window/region) |
+| `aidex_screenshot` | Screenshot aufnehmen + optional optimieren (`scale`, `colors`) |
 | `aidex_windows` | Offene Fenster auflisten (Helper für window-Modus) |
 
 ### Global Search (v1.11+)
@@ -193,13 +193,14 @@ aidex_tasks({ path: ".", status: "active", tag: "bug" })    # Gefiltert
 - Auto-Log bei Status-Änderungen und Task-Erstellung
 - Viewer: Tasks-Tab mit Priority-Farben, Done-Toggle, Cancelled-Sektion (durchgestrichen)
 
-### Screenshots (v1.9)
+### Screenshots (v1.9, Optimierung v1.13)
 ```
 aidex_screenshot()                                             # Ganzer Bildschirm
 aidex_screenshot({ mode: "active_window" })                    # Aktives Fenster
 aidex_screenshot({ mode: "window", window_title: "VS Code" })  # Bestimmtes Fenster
+aidex_screenshot({ scale: 0.5, colors: 2 })                   # S/W, halbe Größe (ideal für LLM)
+aidex_screenshot({ colors: 16 })                               # 16 Farben (UI lesbar)
 aidex_screenshot({ mode: "region" })                           # Rechteck aufziehen
-aidex_screenshot({ delay: 3 })                                 # 3 Sek. warten
 aidex_windows({ filter: "chrome" })                            # Fenster finden
 ```
 - Kein Index nötig - standalone Tool
@@ -207,6 +208,9 @@ aidex_windows({ filter: "chrome" })                            # Fenster finden
 - Default: Speichert in `os.tmpdir()/aidex-screenshot.png` (überschreibt immer)
 - Optional: `filename` und `save_path` für andere Pfade
 - Rückgabe: Dateipfad → Claude kann sofort `Read` aufrufen
+- **LLM-Optimierung:** `scale` (0.1-1.0) und `colors` (2/4/16/256) reduzieren Dateigröße drastisch
+- **Strategie:** Start mit `scale: 0.5, colors: 2` → falls unlesbar `colors: 16` → dann `scale: 0.75`
+- Settings pro Fenster/App merken für die aktuelle Session
 
 ### Global Search (v1.11)
 ```
