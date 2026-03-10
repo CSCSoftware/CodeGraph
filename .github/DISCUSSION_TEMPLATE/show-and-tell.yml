@@ -1,0 +1,32 @@
+title: "[Show & Tell] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Using AiDex in an interesting way? We'd love to hear about it! Share your setup, workflow, tips, or integrations.
+
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      placeholder: |
+        - MCP client: Claude Code
+        - Project type: Large TypeScript monorepo (~3000 files)
+        - Languages: TypeScript + Python
+    validations:
+      required: true
+
+  - type: textarea
+    id: how_you_use_it
+    attributes:
+      label: How you use AiDex
+      placeholder: "I use aidex_global_query to search across all my projects when I can't remember which one has..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: tips
+    attributes:
+      label: Tips or tricks for the community
+      placeholder: "One thing that helped me a lot was..."

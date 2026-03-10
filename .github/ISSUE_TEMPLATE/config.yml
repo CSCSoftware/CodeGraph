@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a Question
+    url: https://github.com/CSCSoftware/AiDex/discussions/new?category=q-a
+    about: Have a question? Use Discussions instead of Issues.
+  - name: Share your setup (Show & Tell)
+    url: https://github.com/CSCSoftware/AiDex/discussions/new?category=show-and-tell
+    about: Tell the community how you use AiDex!
+  - name: Ideas & Feature Requests
+    url: https://github.com/CSCSoftware/AiDex/discussions/new?category=ideas
+    about: Suggest a new feature or discuss an idea.

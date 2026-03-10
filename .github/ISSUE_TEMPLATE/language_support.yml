@@ -1,0 +1,39 @@
+name: Language Support Request
+description: Request support for a new programming language
+labels: ["language-support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        AiDex currently supports: C# · TypeScript · JavaScript · Rust · Python · C · C++ · Java · Go · PHP · Ruby
+
+  - type: input
+    id: language
+    attributes:
+      label: Language name
+      placeholder: "Kotlin, Swift, Zig, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: tree_sitter
+    attributes:
+      label: Tree-sitter grammar
+      description: Link to the tree-sitter grammar for this language (if you know it).
+      placeholder: "https://github.com/nickel-lang/tree-sitter-nickel"
+
+  - type: textarea
+    id: keywords
+    attributes:
+      label: Keywords to filter
+      description: Language keywords that should NOT be indexed as identifiers (if, else, return, etc.)
+      placeholder: |
+        fun, val, var, class, object, interface, when, is, in, ...
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Willing to contribute?
+      options:
+        - label: I can submit a PR with the keyword list
+        - label: I can help test the implementation

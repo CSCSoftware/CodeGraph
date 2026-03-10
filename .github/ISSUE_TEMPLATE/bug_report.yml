@@ -1,0 +1,56 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in as much detail as you can.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "When I call aidex_query with mode='contains', it returns..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "I expected it to return all identifiers containing the term..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run aidex_init on a TypeScript project
+        2. Call aidex_query with term="render", mode="contains"
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        - AiDex version: 1.13.0
+        - Node.js version: 20.x
+        - OS: Windows 11 / macOS 14 / Ubuntu 22.04
+        - MCP client: Claude Code / Claude Desktop / Cursor
+        - Language(s) being indexed: TypeScript, C#, ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / logs
+      description: Any error messages or stack traces.
+      render: shell

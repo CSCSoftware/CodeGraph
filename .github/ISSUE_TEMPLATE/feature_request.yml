@@ -1,0 +1,49 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea? We'd love to hear it! For larger discussions, consider using [GitHub Discussions → Ideas](https://github.com/CSCSoftware/AiDex/discussions/new?category=ideas) instead.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or pain point.
+      placeholder: "When working on a large monorepo, I often need to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to see?
+      placeholder: "A new tool `aidex_xxx` that..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you've tried or alternative approaches.
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Is this language-specific?
+      options:
+        - No (general feature)
+        - TypeScript / JavaScript
+        - C#
+        - Python
+        - Rust
+        - C / C++
+        - Java
+        - Go
+        - PHP
+        - Ruby
+        - Other

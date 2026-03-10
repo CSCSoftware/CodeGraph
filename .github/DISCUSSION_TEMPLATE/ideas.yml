@@ -1,0 +1,27 @@
+title: "[Idea] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea to make AiDex better? Share it here — we read everything.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      placeholder: "It would be great if AiDex could..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why would this be useful?
+      placeholder: "When working on large codebases, I often..."
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Any thoughts on implementation?
+      description: Optional — share if you have ideas on how it could work.

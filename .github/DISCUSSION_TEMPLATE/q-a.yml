@@ -1,0 +1,25 @@
+title: "[Question] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask anything about AiDex — setup, usage, configuration, or how things work under the hood.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      placeholder: "How do I configure AiDex to work with a monorepo?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Your setup, what you've already tried, etc.
+      placeholder: |
+        - MCP client: Claude Code / Cursor / ...
+        - Language: TypeScript, C#, ...
+        - What I've tried: ...

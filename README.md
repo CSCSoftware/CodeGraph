@@ -4,6 +4,7 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](https://nodejs.org/)
 [![MCP Server](https://img.shields.io/badge/MCP-Server-blue.svg)](https://modelcontextprotocol.io/)
+[![GitHub Discussions](https://img.shields.io/github/discussions/CSCSoftware/AiDex?label=Discussions&logo=github)](https://github.com/CSCSoftware/AiDex/discussions)
 
 **Stop wasting 80% of your AI's context window on code searches.**
 
@@ -646,12 +647,24 @@ AiDex/                   ← This repository
 └── build/               ← Compiled output
 ```
 
+## Community
+
+**[GitHub Discussions](https://github.com/CSCSoftware/AiDex/discussions)** — Ask questions, share your setup, suggest ideas.
+
+| Category | For |
+|----------|-----|
+| [Q&A](https://github.com/CSCSoftware/AiDex/discussions/new?category=q-a) | Setup help, usage questions |
+| [Ideas](https://github.com/CSCSoftware/AiDex/discussions/new?category=ideas) | Feature suggestions |
+| [Show & Tell](https://github.com/CSCSoftware/AiDex/discussions/new?category=show-and-tell) | Share your workflow |
+| [Announcements](https://github.com/CSCSoftware/AiDex/discussions) | Release news (maintainer only) |
+
 ## Contributing
 
-PRs welcome! Especially for:
-- New language support
-- Performance improvements
-- Documentation
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full details. Quick summary:
+
+- **Bug?** → [Open an issue](https://github.com/CSCSoftware/AiDex/issues/new?template=bug_report.yml)
+- **Idea?** → [Start a Discussion](https://github.com/CSCSoftware/AiDex/discussions/new?category=ideas)
+- **New language?** → Add a keyword file in `src/parser/languages/` and open a PR
 
 ## License
 
