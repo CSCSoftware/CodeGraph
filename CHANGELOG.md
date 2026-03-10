@@ -2,6 +2,18 @@
 
 All notable changes to AiDex will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Global query cache not invalidated after init/update**: `aidex_init` and `aidex_update` now call `invalidateGlobalCache()` so global searches immediately see fresh data
+- **Command injection in macOS/Linux screenshot post-processing**: Replaced `execSync` with shell string interpolation with `execFileSync` using argument arrays — file paths are no longer injected into shell commands
+- **Duplicate SQL LIKE escaping**: Centralized in `escapeLike()` (db layer) and `escapeLikeTerm()` (commands layer) — removed 4 inline copies
+
+### Refactored
+- **`normalizePath()` utility**: Added to `shared.ts` for consistent path separator normalization
+- **`escapeLikeTerm()` utility**: Added to `shared.ts` and exported — use instead of inline LIKE escaping
+- **macOS sips output parsing**: Replaced shell pipe (`| tail -1 | awk`) with regex on direct `sips` output
+
 ## [1.13.0] - 2026-03-09
 
 ### Added

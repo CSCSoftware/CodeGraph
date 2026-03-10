@@ -8,6 +8,7 @@ import { glob } from 'glob';
 import { createHash } from 'crypto';
 import { minimatch } from 'minimatch';
 import { INDEX_DIR } from '../constants.js';
+import { invalidateGlobalCache } from './global/global-query.js';
 
 /**
  * Compute a short (16-char) SHA256 hash of content.
@@ -362,6 +363,9 @@ export async function init(params: InitParams): Promise<InitResult> {
         methods: totalMethods,
         types: totalTypes,
     });
+
+    // Invalidate global query cache so next search sees fresh data
+    invalidateGlobalCache();
 
     return {
         success: true,

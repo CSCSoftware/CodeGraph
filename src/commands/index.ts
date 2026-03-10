@@ -2,7 +2,7 @@
  * Commands module exports
  */
 
-export { validateIndex, noIndexError, withProjectDb, withDatabase } from './shared.js';
+export { validateIndex, noIndexError, withProjectDb, withDatabase, normalizePath, escapeLikeTerm } from './shared.js';
 export { init, type InitParams, type InitResult } from './init.js';
 export { query, parseTimeOffset, type QueryParams, type QueryResult, type QueryMatch, type QueryMode } from './query.js';
 export { signature, signatures, type SignatureParams, type SignatureResult, type SignaturesParams, type SignaturesResult } from './signature.js';

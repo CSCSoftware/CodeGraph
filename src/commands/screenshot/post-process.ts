@@ -13,7 +13,7 @@
  * v1.13.0
  */
 
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { statSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -146,9 +146,9 @@ $scaled.Dispose()
 
 function hasTool(name: string): boolean {
     try {
-        execSync(`command -v ${name}`, {
+        execFileSync('command', ['-v', name], {
             encoding: 'utf8', timeout: 5000,
-            stdio: ['pipe', 'pipe', 'pipe'],
+            stdio: ['pipe', 'pipe', 'pipe'], shell: true,
         });
         return true;
     } catch {
@@ -163,30 +163,27 @@ function postProcessDarwin(filePath: string, options: PostProcessOptions): void 
     // Scale with sips (built-in)
     if (scale < 1.0) {
         // Get current dimensions
-        const widthStr = execSync(`sips -g pixelWidth "${filePath}" | tail -1 | awk '{print $2}'`, {
-            encoding: 'utf8', timeout: 10000, shell: '/bin/bash',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-        const newWidth = Math.round(parseInt(widthStr, 10) * scale);
-        execSync(`sips --resampleWidth ${newWidth} "${filePath}"`, {
-            timeout: 10000,
+        const widthStr = execFileSync('sips', ['-g', 'pixelWidth', filePath], {
+            encoding: 'utf8', timeout: 10000,
             stdio: ['pipe', 'pipe', 'pipe'],
         });
+        const match = widthStr.match(/pixelWidth:\s*(\d+)/);
+        const newWidth = match ? Math.round(parseInt(match[1], 10) * scale) : 0;
+        if (newWidth > 0) {
+            execFileSync('sips', ['--resampleWidth', String(newWidth), filePath], {
+                timeout: 10000,
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+        }
     }
 
     // Color reduction with ImageMagick (if available)
-    if (colors && hasTool('convert')) {
-        execSync(`convert "${filePath}" -colors ${colors} -type Palette PNG8:"${filePath}"`, {
+    const convertCmd = hasTool('magick') ? 'magick' : hasTool('convert') ? 'convert' : null;
+    if (colors && convertCmd) {
+        execFileSync(convertCmd, [filePath, '-colors', String(colors), '-type', 'Palette', `PNG8:${filePath}`], {
             timeout: 30000,
             stdio: ['pipe', 'pipe', 'pipe'],
         });
-    } else if (colors && hasTool('magick')) {
-        execSync(`magick "${filePath}" -colors ${colors} -type Palette PNG8:"${filePath}"`, {
-            timeout: 30000,
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
-    } else if (colors) {
-        // No ImageMagick - skip color reduction silently
     }
 }
 
@@ -208,22 +205,20 @@ function postProcessLinux(filePath: string, options: PostProcessOptions): void {
         throw new Error('ImageMagick not found. Install it: sudo apt install imagemagick');
     }
 
-    // Build a single convert command for both operations
-    const args: string[] = [`"${filePath}"`];
+    const args: string[] = [filePath];
 
     if (scale < 1.0) {
         const pct = Math.round(scale * 100);
-        args.push(`-resize ${pct}%`);
+        args.push('-resize', `${pct}%`);
     }
 
     if (colors) {
-        args.push(`-colors ${colors} -type Palette`);
-        args.push(`PNG8:"${filePath}"`);
+        args.push('-colors', String(colors), '-type', 'Palette', `PNG8:${filePath}`);
     } else {
-        args.push(`"${filePath}"`);
+        args.push(filePath);
     }
 
-    execSync(`${convertCmd} ${args.join(' ')}`, {
+    execFileSync(convertCmd, args, {
         timeout: 30000,
         stdio: ['pipe', 'pipe', 'pipe'],
     });

@@ -9,6 +9,22 @@ import { openDatabase, createQueries, type AiDexDatabase } from '../db/index.js'
 import type { Queries } from '../db/queries.js';
 
 /**
+ * Normalize path separators to forward slashes (consistent storage format).
+ * Use this instead of inline .replace(/\\/g, '/') everywhere.
+ */
+export function normalizePath(p: string): string {
+    return p.replace(/\\/g, '/');
+}
+
+/**
+ * Escape a term for use in SQLite LIKE queries (with ESCAPE '\').
+ * Handles: backslash, percent, underscore.
+ */
+export function escapeLikeTerm(term: string): string {
+    return term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
  * Validate that a project has an AiDex index. Returns dbPath or null.
  */
 export function validateIndex(projectPath: string): string | null {

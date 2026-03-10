@@ -7,6 +7,7 @@
 import type Database from 'better-sqlite3';
 import type { GlobalProject } from '../../db/global-database.js';
 import { withGlobalDb } from './global-shared.js';
+import { escapeLikeTerm } from '../shared.js';
 
 // ============================================================
 // Types
@@ -95,9 +96,7 @@ export function globalSignatures(params: GlobalSignaturesParams): GlobalSignatur
                 };
             }
 
-            // Escape term for LIKE
-            const escapedTerm = params.term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-            const likePattern = `%${escapedTerm}%`;
+            const likePattern = `%${escapeLikeTerm(params.term)}%`;
 
             interface CombinedResult {
                 methods: GlobalMethodMatch[];

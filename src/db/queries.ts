@@ -5,6 +5,11 @@
 import type Database from 'better-sqlite3';
 import type { AiDexDatabase } from './database.js';
 
+/** Escape a term for SQLite LIKE queries (with ESCAPE '\'). */
+function escapeLike(term: string): string {
+    return term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 // ============================================================
 // Type definitions
 // ============================================================
@@ -430,15 +435,13 @@ export class Queries {
                 param = term;
                 break;
             case 'contains': {
-                const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
                 sql = "SELECT * FROM items WHERE term LIKE ? ESCAPE '\\' COLLATE NOCASE LIMIT ?";
-                param = `%${escaped}%`;
+                param = `%${escapeLike(term)}%`;
                 break;
             }
             case 'starts_with': {
-                const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
                 sql = "SELECT * FROM items WHERE term LIKE ? ESCAPE '\\' COLLATE NOCASE LIMIT ?";
-                param = `${escaped}%`;
+                param = `${escapeLike(term)}%`;
                 break;
             }
         }

@@ -7,6 +7,7 @@
 import type Database from 'better-sqlite3';
 import type { GlobalProject } from '../../db/global-database.js';
 import { withGlobalDb } from './global-shared.js';
+import { escapeLikeTerm } from '../shared.js';
 
 // ============================================================
 // Types
@@ -219,17 +220,15 @@ function buildItemSearch(alias: string, term: string, mode: GlobalQueryMode): { 
                 param: term,
             };
         case 'contains': {
-            const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
             return {
                 sql: `SELECT id, term FROM ${alias}.items WHERE term LIKE ? ESCAPE '\\' COLLATE NOCASE LIMIT ?`,
-                param: `%${escaped}%`,
+                param: `%${escapeLikeTerm(term)}%`,
             };
         }
         case 'starts_with': {
-            const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
             return {
                 sql: `SELECT id, term FROM ${alias}.items WHERE term LIKE ? ESCAPE '\\' COLLATE NOCASE LIMIT ?`,
-                param: `${escaped}%`,
+                param: `${escapeLikeTerm(term)}%`,
             };
         }
     }

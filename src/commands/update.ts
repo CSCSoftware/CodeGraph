@@ -13,6 +13,7 @@ import { minimatch } from 'minimatch';
 import { extract } from '../parser/index.js';
 import { DEFAULT_EXCLUDE, readGitignore, shortHash } from './init.js';
 import { validateIndex, noIndexError, withDatabase, withProjectDb } from './shared.js';
+import { invalidateGlobalCache } from './global/global-query.js';
 
 // ============================================================
 // Types
@@ -268,6 +269,9 @@ export function update(params: UpdateParams): UpdateResult {
 
             // Cleanup unused items
             queries.deleteUnusedItems();
+
+            // Invalidate global query cache so next search sees fresh data
+            invalidateGlobalCache();
 
             return {
                 success: true,
