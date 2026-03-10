@@ -36,3 +36,15 @@ CREATE TABLE IF NOT EXISTS metadata (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- ------------------------------------------------------------
+-- Guidelines (globaler Key-Value-Store für KI-Anweisungen)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS guidelines (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_guidelines_key ON guidelines(key);

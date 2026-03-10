@@ -5,7 +5,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, screenshot, listWindows, globalInit, globalStatus, globalQuery, globalSignatures, globalRefresh, type QueryMode, type TaskAction, type ScreenshotMode, type ScreenshotColors, type SignatureKind } from '../commands/index.js';
+import { init, query, signature, signatures, update, remove, summary, tree, describe, link, unlink, listLinks, scan, files, note, getSessionNote, session, formatSessionTime, formatDuration, task, tasks, screenshot, listWindows, globalInit, globalStatus, globalQuery, globalSignatures, globalRefresh, globalGuideline, type QueryMode, type TaskAction, type ScreenshotMode, type ScreenshotColors, type SignatureKind, type GuidelineAction } from '../commands/index.js';
 import type { TaskRow } from '../db/index.js';
 import { openDatabase } from '../db/index.js';
 import { startViewer, stopViewer } from '../viewer/index.js';
@@ -720,6 +720,33 @@ export function registerTools(): Tool[] {
                 required: [],
             },
         },
+        {
+            name: `${TOOL_PREFIX}global_guideline`,
+            description: `Manage persistent guidelines in the global ${PRODUCT_NAME} database (~/.aidex/global.db). Guidelines are named key-value instructions that apply across all projects — e.g. "review" → detailed review checklist, "release-prep" → release steps, "new-feature" → conventions to follow. Use \`list\` at session start to load active guidelines. Works without prior global_init.`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    action: {
+                        type: 'string',
+                        enum: ['set', 'get', 'list', 'delete'],
+                        description: 'set: create/overwrite | get: read one | list: all (optional filter) | delete: remove',
+                    },
+                    key: {
+                        type: 'string',
+                        description: 'Guideline key/name (required for set, get, delete). Use short slugs like "review", "release-prep".',
+                    },
+                    value: {
+                        type: 'string',
+                        description: 'Guideline content — the full instruction text (required for set)',
+                    },
+                    filter: {
+                        type: 'string',
+                        description: 'Substring filter for keys when listing (optional)',
+                    },
+                },
+                required: ['action'],
+            },
+        },
     ];
 }
 
@@ -812,6 +839,9 @@ export async function handleToolCall(
 
             case `${TOOL_PREFIX}global_refresh`:
                 return handleGlobalRefresh(args);
+
+            case `${TOOL_PREFIX}global_guideline`:
+                return handleGlobalGuideline(args);
 
             default:
                 return {
@@ -2284,6 +2314,59 @@ function handleGlobalSignatures(args: Record<string, unknown>): { content: Array
 /**
  * Handle global refresh
  */
+function handleGlobalGuideline(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
+    const action = args.action as string;
+    if (!action) {
+        return { content: [{ type: 'text', text: 'Error: action parameter is required' }] };
+    }
+
+    const result = globalGuideline({
+        action: action as GuidelineAction,
+        key: args.key as string | undefined,
+        value: args.value as string | undefined,
+        filter: args.filter as string | undefined,
+    });
+
+    if (!result.success) {
+        return { content: [{ type: 'text', text: `Error: ${result.error}` }] };
+    }
+
+    switch (result.action) {
+        case 'set':
+        case 'get': {
+            const g = result.guideline!;
+            const updated = new Date(g.updated_at).toLocaleString();
+            const created = new Date(g.created_at).toLocaleString();
+            let msg = `# Guideline: ${g.key}\n\n${g.value}\n\n`;
+            msg += `*Created: ${created} | Updated: ${updated}*`;
+            return { content: [{ type: 'text', text: msg }] };
+        }
+
+        case 'list': {
+            const rows = result.guidelines!;
+            if (rows.length === 0) {
+                return { content: [{ type: 'text', text: 'No guidelines found.' }] };
+            }
+            let msg = `# Guidelines (${rows.length})\n\n`;
+            for (const g of rows) {
+                const updated = new Date(g.updated_at).toLocaleString();
+                msg += `## ${g.key}\n${g.value}\n\n*Updated: ${updated}*\n\n---\n\n`;
+            }
+            return { content: [{ type: 'text', text: msg.trimEnd() }] };
+        }
+
+        case 'delete':
+            return {
+                content: [{
+                    type: 'text',
+                    text: result.deleted
+                        ? `Guideline "${args.key}" deleted.`
+                        : `Guideline "${args.key}" not found.`,
+                }],
+            };
+    }
+}
+
 function handleGlobalRefresh(args: Record<string, unknown>): { content: Array<{ type: string; text: string }> } {
     const result = globalRefresh({
         project: args.project as string | undefined,

@@ -18,6 +18,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Types
 // ============================================================
 
+export interface GuidelineRow {
+    key: string;
+    value: string;
+    created_at: number;
+    updated_at: number;
+}
+
 export interface GlobalProject {
     id: number;
     path: string;
@@ -276,6 +283,45 @@ export class GlobalDatabase {
             'SELECT value FROM metadata WHERE key = ?'
         ).get(key) as { value: string | null } | undefined;
         return row?.value ?? null;
+    }
+
+    // --------------------------------------------------------
+    // Guidelines
+    // --------------------------------------------------------
+
+    setGuideline(key: string, value: string): void {
+        const now = Date.now();
+        this.db.prepare(`
+            INSERT INTO guidelines (key, value, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value      = excluded.value,
+                updated_at = excluded.updated_at
+        `).run(key, value, now, now);
+    }
+
+    getGuideline(key: string): GuidelineRow | null {
+        const row = this.db.prepare(
+            'SELECT key, value, created_at, updated_at FROM guidelines WHERE key = ?'
+        ).get(key);
+        return (row as GuidelineRow) ?? null;
+    }
+
+    listGuidelines(filter?: string): GuidelineRow[] {
+        if (filter) {
+            const escaped = filter.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+            return this.db.prepare(
+                "SELECT key, value, created_at, updated_at FROM guidelines WHERE key LIKE ? ESCAPE '\\' ORDER BY key"
+            ).all(`%${escaped}%`) as GuidelineRow[];
+        }
+        return this.db.prepare(
+            'SELECT key, value, created_at, updated_at FROM guidelines ORDER BY key'
+        ).all() as GuidelineRow[];
+    }
+
+    deleteGuideline(key: string): boolean {
+        const result = this.db.prepare('DELETE FROM guidelines WHERE key = ?').run(key);
+        return result.changes > 0;
     }
 
     // --------------------------------------------------------

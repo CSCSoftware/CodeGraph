@@ -4,6 +4,9 @@ All notable changes to AiDex will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`aidex_global_guideline`**: New tool — persistent key-value store in `~/.aidex/global.db` for AI guidelines and coding conventions. Store named instructions like "review" → review checklist, "release-prep" → release steps. Actions: `set`, `get`, `list`, `delete`. Works without prior `global_init`.
+
 ### Fixed
 - **Global query cache not invalidated after init/update**: `aidex_init` and `aidex_update` now call `invalidateGlobalCache()` so global searches immediately see fresh data
 - **Command injection in macOS/Linux screenshot post-processing**: Replaced `execSync` with shell string interpolation with `execFileSync` using argument arrays — file paths are no longer injected into shell commands
